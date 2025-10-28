@@ -55,7 +55,7 @@ COPY --from=builder C:\gradle C:\gradle
 
 # Create jf.exe as a copy of jfrog.exe for compatibility
 # This allows both 'jf' and 'jfrog' commands to work in PowerShell
-RUN Copy-Item -Path C:\bin\jfrog.exe -Destination C:\bin\jf.exe
+RUN copy C:\bin\jfrog.exe C:\bin\jf.exe
 
 # Set environment variables
 ENV GODEBUG=netdns=go
