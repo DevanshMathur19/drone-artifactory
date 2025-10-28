@@ -351,9 +351,29 @@ func getShell() (string, string) {
 
 func getJfrogBin() string {
 	if runtime.GOOS == "windows" {
-		if _, err := os.Stat("C:/bin/jfrog.exe"); err == nil {
-			return "C:/bin/jfrog.exe"
+		// Check common installation paths in order of likelihood
+		// JFrog CLI installer behavior varies based on environment:
+		// - With Git for Windows (MinGW): installs to /usr/bin/jf.exe
+		// - Without MinGW: may install to C:/bin/jf.exe or C:/usr/bin/jf.exe
+		paths := []string{
+			"/usr/bin/jf.exe",
+			"C:/usr/bin/jf.exe",
+			"C:/bin/jf.exe",
+			"/usr/bin/jfrog.exe",
+			"C:/usr/bin/jfrog.exe",
+			"C:/bin/jfrog.exe",
 		}
+		
+		for _, path := range paths {
+			if _, err := os.Stat(path); err == nil {
+				return path
+			}
+		}
+		
+		// Return jf.exe with explicit extension so PowerShell can find it in PATH
+		// This handles Windows base image updates that made PowerShell stricter
+		// about executable resolution even with PATHEXT set correctly
+		return "jf.exe"
 	}
 	return "jf"
 }
