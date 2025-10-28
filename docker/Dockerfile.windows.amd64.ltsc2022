@@ -53,6 +53,10 @@ COPY --from=builder C:\jdk C:\jdk
 COPY --from=builder C:\maven C:\maven
 COPY --from=builder C:\gradle C:\gradle
 
+# Create jf.exe as a copy of jfrog.exe for compatibility
+# This allows both 'jf' and 'jfrog' commands to work in PowerShell
+RUN Copy-Item -Path C:\bin\jfrog.exe -Destination C:\bin\jf.exe
+
 # Set environment variables
 ENV GODEBUG=netdns=go
 ENV PATH="C:\bin;C:\jdk\jdk-17.0.8+7\bin;C:\maven\apache-maven-3.9.4\bin;C:\gradle\gradle-8.3\bin;C:\Windows\System32;C:\Windows;C:\Program Files\PowerShell"
