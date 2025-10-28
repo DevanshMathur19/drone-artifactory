@@ -102,12 +102,17 @@ type Args struct {
 
 // Exec executes the plugin.
 func Exec(ctx context.Context, args Args) error {
+	fmt.Println("[DEBUG] Exec: Plugin started")
+	fmt.Printf("[DEBUG] Exec: GOOS=%s, URL=%s, Source=%s, Target=%s\n", runtime.GOOS, args.URL, args.Source, args.Target)
 
 	logrus.Println("Checking RT commands")
+	fmt.Printf("[DEBUG] Exec: BuildTool='%s', Command='%s'\n", args.BuildTool, args.Command)
 	if args.BuildTool != "" || args.Command != "" {
 		logrus.Println("Handling rt command handleRtCommand")
+		fmt.Println("[DEBUG] Exec: Taking HandleRtCommands path")
 		return HandleRtCommands(args)
 	}
+	fmt.Println("[DEBUG] Exec: Taking direct upload path (line 123)")
 
 	enableProxy := parseBoolOrDefault(false, args.EnableProxy)
 	if enableProxy {
@@ -120,7 +125,10 @@ func Exec(ctx context.Context, args Args) error {
 		return fmt.Errorf("JFrog Artifactory URL must be set, or anonymous access is not permitted")
 	}
 
-	cmdArgs := []string{getJfrogBin(), "rt", "u", fmt.Sprintf("--url %s", args.URL)}
+	fmt.Println("[DEBUG] Exec: Building command arguments...")
+	jfrogBinPath := getJfrogBin()
+	fmt.Printf("[DEBUG] Exec: getJfrogBin() returned: '%s'\n", jfrogBinPath)
+	cmdArgs := []string{jfrogBinPath, "rt", "u", fmt.Sprintf("--url %s", args.URL)}
 	if args.Retries != 0 {
 		cmdArgs = append(cmdArgs, fmt.Sprintf("--retries=%d", args.Retries))
 	}
@@ -202,10 +210,13 @@ func Exec(ctx context.Context, args Args) error {
 	}
 
 	cmdStr := strings.Join(cmdArgs[:], " ")
+	fmt.Printf("[DEBUG] Exec: Final command string: %s\n", cmdStr)
 
 	shell, shArg := getShell()
+	fmt.Printf("[DEBUG] Exec: Shell='%s', ShellArg='%s'\n", shell, shArg)
 
 	cmd := exec.Command(shell, shArg, cmdStr)
+	fmt.Printf("[DEBUG] Exec: exec.Command constructed: %s %s '%s'\n", shell, shArg, cmdStr)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false")
 

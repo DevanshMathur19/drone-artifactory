@@ -39,12 +39,9 @@ func HandleRtCommands(args Args) error {
 	}
 
 	for _, cmd := range commandsList {
-		fmt.Println("[DEBUG] HandleRtCommands: Calling getJfrogBin()...")
 		jfrogBin := getJfrogBin()
-		fmt.Printf("[DEBUG] HandleRtCommands: getJfrogBin() returned: '%s'\n", jfrogBin)
 		execArgs := []string{jfrogBin}
 		execArgs = append(execArgs, cmd...)
-		fmt.Printf("[DEBUG] HandleRtCommands: Full execArgs: %v\n", execArgs)
 		err := ExecCommand(args, execArgs)
 		if err != nil {
 			logrus.Println("Error Unable to run err = ", err)
