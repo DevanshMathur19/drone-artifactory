@@ -351,6 +351,8 @@ func getShell() (string, string) {
 
 func getJfrogBin() string {
 	if runtime.GOOS == "windows" {
+		fmt.Println("[DEBUG] getJfrogBin: Running on Windows, checking installation paths...")
+		
 		// Check common installation paths in order of likelihood
 		// JFrog CLI installer behavior varies based on environment:
 		// - With Git for Windows (MinGW): installs to /usr/bin/jf.exe
@@ -365,16 +367,24 @@ func getJfrogBin() string {
 		}
 		
 		for _, path := range paths {
+			fmt.Printf("[DEBUG] getJfrogBin: Checking path: %s\n", path)
 			if _, err := os.Stat(path); err == nil {
+				fmt.Printf("[DEBUG] getJfrogBin: ✓ Found JFrog CLI at: %s\n", path)
 				return path
+			} else {
+				fmt.Printf("[DEBUG] getJfrogBin: ✗ Not found at %s (error: %v)\n", path, err)
 			}
 		}
 		
 		// Return jf.exe with explicit extension so PowerShell can find it in PATH
 		// This handles Windows base image updates that made PowerShell stricter
 		// about executable resolution even with PATHEXT set correctly
+		fmt.Println("[DEBUG] getJfrogBin: No explicit path found, returning 'jf.exe' to rely on PATH")
+		fmt.Printf("[DEBUG] getJfrogBin: Current PATH env: %s\n", os.Getenv("PATH"))
+		fmt.Printf("[DEBUG] getJfrogBin: Current PATHEXT env: %s\n", os.Getenv("PATHEXT"))
 		return "jf.exe"
 	}
+	fmt.Println("[DEBUG] getJfrogBin: Running on non-Windows OS, returning 'jf'")
 	return "jf"
 }
 
