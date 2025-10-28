@@ -337,26 +337,40 @@ func setAuthParams(cmdArgs []string, args Args) ([]string, error) {
 
 func getShell() (string, string) {
 	if runtime.GOOS == "windows" {
+		fmt.Println("[DEBUG] getShell: Running on Windows")
 		// First check for PowerShell Core (pwsh.exe) which is used in PowerShell Nanoserver
-		if _, err := os.Stat("C:/Program Files/PowerShell/pwsh.exe"); err == nil {
+		pwshPath := "C:/Program Files/PowerShell/pwsh.exe"
+		if _, err := os.Stat(pwshPath); err == nil {
+			fmt.Printf("[DEBUG] getShell: Found pwsh.exe at %s, using pwsh\n", pwshPath)
 			return "pwsh", "-Command"
+		} else {
+			fmt.Printf("[DEBUG] getShell: pwsh.exe not found at %s (error: %v)\n", pwshPath, err)
 		}
 
 		// Fall back to traditional PowerShell
+		fmt.Println("[DEBUG] getShell: Falling back to powershell.exe")
 		return "powershell", "-Command"
 	}
 
+	fmt.Println("[DEBUG] getShell: Running on non-Windows, using sh")
 	return "sh", "-c"
 }
 
 func getJfrogBin() string {
 	if runtime.GOOS == "windows" {
-		if _, err := os.Stat("C:/bin/jfrog.exe"); err == nil {
-			return "C:/bin/jfrog.exe"
+		fmt.Println("[DEBUG] getJfrogBin: Running on Windows")
+		jfrogPath := "C:/bin/jfrog.exe"
+		if _, err := os.Stat(jfrogPath); err == nil {
+			fmt.Printf("[DEBUG] getJfrogBin: Found jfrog.exe at %s, returning full path\n", jfrogPath)
+			return jfrogPath
+		} else {
+			fmt.Printf("[DEBUG] getJfrogBin: jfrog.exe not found at %s (error: %v)\n", jfrogPath, err)
 		}
 		// Return jf.exe with explicit extension for PowerShell compatibility
+		fmt.Println("[DEBUG] getJfrogBin: Returning fallback 'jf.exe'")
 		return "jf.exe"
 	}
+	fmt.Println("[DEBUG] getJfrogBin: Running on non-Windows, returning 'jf'")
 	return "jf"
 }
 

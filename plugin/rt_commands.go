@@ -39,8 +39,12 @@ func HandleRtCommands(args Args) error {
 	}
 
 	for _, cmd := range commandsList {
-		execArgs := []string{getJfrogBin()}
+		fmt.Println("[DEBUG] HandleRtCommands: Calling getJfrogBin()...")
+		jfrogBin := getJfrogBin()
+		fmt.Printf("[DEBUG] HandleRtCommands: getJfrogBin() returned: '%s'\n", jfrogBin)
+		execArgs := []string{jfrogBin}
 		execArgs = append(execArgs, cmd...)
+		fmt.Printf("[DEBUG] HandleRtCommands: Full execArgs: %v\n", execArgs)
 		err := ExecCommand(args, execArgs)
 		if err != nil {
 			logrus.Println("Error Unable to run err = ", err)
@@ -174,7 +178,11 @@ func ExecCommand(args Args, cmdArgs []string) error {
 
 	cmdStr := strings.Join(cmdArgs[:], " ")
 
+	fmt.Println("[DEBUG] ExecCommand: Getting shell for OS:", runtime.GOOS)
 	shell, shArg := GetShellForOs(runtime.GOOS)
+	fmt.Printf("[DEBUG] ExecCommand: Selected shell='%s', shellArg='%s'\n", shell, shArg)
+	fmt.Printf("[DEBUG] ExecCommand: Command string='%s'\n", cmdStr)
+	fmt.Printf("[DEBUG] ExecCommand: First arg (jfrog binary)='%s'\n", cmdArgs[0])
 
 	logrus.Println()
 	logrus.Printf("%s %s %s", shell, shArg, cmdStr)
