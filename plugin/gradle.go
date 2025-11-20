@@ -130,7 +130,7 @@ func GetGradlePublishCommand(args Args) ([][]string, error) {
 		errMsg := "AccessToken is not supported for Gradle" +
 			" try username: <username> , password: <access_token> instead"
 		logrus.Println(errMsg)
-		return cmdList, fmt.Errorf(errMsg)
+		return cmdList, fmt.Errorf("%s", errMsg)
 	}
 	rtPublishCommandArgs = append(rtPublishCommandArgs, "--build-name="+args.BuildName)
 	rtPublishCommandArgs = append(rtPublishCommandArgs, "--build-number="+args.BuildNumber)

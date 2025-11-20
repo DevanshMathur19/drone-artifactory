@@ -5,9 +5,9 @@ FROM mcr.microsoft.com/windows/servercore:1809 AS builder
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
 # Set versions
-ENV JDK_VERSION="17.0.8+7"
-ENV MAVEN_VERSION="3.9.4"
-ENV GRADLE_VERSION="8.3"
+ENV JDK_VERSION="17.0.13+11"
+ENV MAVEN_VERSION="3.9.11"
+ENV GRADLE_VERSION="8.13"
 
 # Create necessary directories
 RUN mkdir C:\bin | Out-Null; `
@@ -24,18 +24,18 @@ COPY docker/cert.windows.pem docker/cacert.pem C:\users\ContainerAdministrator\.
 RUN certutil -generateSSTFromWU C:\certificates\ca-certificates.sst; `
     `
     # Download JFrog CLI
-    Invoke-WebRequest -Uri https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.68.0/jfrog-cli-windows-amd64/jfrog.exe -OutFile C:\bin\jfrog.exe; `
+    Invoke-WebRequest -Uri https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.82.0/jfrog-cli-windows-amd64/jfrog.exe -OutFile C:\bin\jfrog.exe; `
     `
     # Download and install JDK
-    Invoke-WebRequest -Uri "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_windows_hotspot_17.0.8_7.zip" -OutFile "C:\jdk.zip"; `
+    Invoke-WebRequest -Uri "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_windows_hotspot_17.0.13_11.zip" -OutFile "C:\jdk.zip"; `
     Expand-Archive -Path "C:\jdk.zip" -DestinationPath "C:\jdk"; `
     `
     # Download and install Maven
-    Invoke-WebRequest -Uri https://repo1.maven.org/maven2/org/apache/maven/apache-maven/3.9.4/apache-maven-3.9.4-bin.zip -OutFile C:\maven.zip; `
+    Invoke-WebRequest -Uri https://repo1.maven.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip -OutFile C:\maven.zip; `
     Expand-Archive -Path C:\maven.zip -DestinationPath C:\maven; `
     `
     # Download and install Gradle
-    Invoke-WebRequest -Uri "https://services.gradle.org/distributions/gradle-8.3-bin.zip" -OutFile "C:\gradle.zip"; `
+    Invoke-WebRequest -Uri "https://services.gradle.org/distributions/gradle-8.13-bin.zip" -OutFile "C:\gradle.zip"; `
     Expand-Archive -Path "C:\gradle.zip" -DestinationPath "C:\gradle"
 
 # Final image using PowerShell Nanoserver - much smaller base image with PowerShell support
@@ -55,10 +55,10 @@ COPY --from=builder C:\gradle C:\gradle
 
 # Set environment variables
 ENV GODEBUG=netdns=go
-ENV PATH="C:\bin;C:\jdk\jdk-17.0.8+7\bin;C:\maven\apache-maven-3.9.4\bin;C:\gradle\gradle-8.3\bin;C:\Windows\System32;C:\Windows;C:\Program Files\PowerShell"
-ENV JAVA_HOME="C:\jdk\jdk-17.0.8+7"
-ENV MAVEN_HOME="C:\maven\apache-maven-3.9.4"
-ENV GRADLE_HOME="C:\gradle\gradle-8.3"
+ENV PATH="C:\bin;C:\jdk\jdk-17.0.13+11\bin;C:\maven\apache-maven-3.9.11\bin;C:\gradle\gradle-8.13\bin;C:\Windows\System32;C:\Windows;C:\Program Files\PowerShell"
+ENV JAVA_HOME="C:\jdk\jdk-17.0.13+11"
+ENV MAVEN_HOME="C:\maven\apache-maven-3.9.11"
+ENV GRADLE_HOME="C:\gradle\gradle-8.13"
 # Add environment variable to prevent interactive prompts
 ENV CI="true"
 
