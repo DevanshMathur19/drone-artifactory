@@ -230,7 +230,7 @@ func Exec(ctx context.Context, args Args) error {
 
 	cmd := exec.Command(shell, shArg, cmdStr)
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false")
+	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
 
 	// Only stdout is teed into summaryBuf: the --detailed-summary JSON is
 	// written to stdout, and exec.Cmd only serializes writes to Stdout/Stderr
@@ -298,7 +298,7 @@ func publishBuildInfo(args Args) error {
 	shell, shArg := getShell()
 	publishCmd := exec.Command(shell, shArg, publishCmdStr)
 	publishCmd.Env = os.Environ()
-	publishCmd.Env = append(publishCmd.Env, "JFROG_CLI_OFFER_CONFIG=false")
+	publishCmd.Env = append(publishCmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
 	publishCmd.Stdout = os.Stdout
 	publishCmd.Stderr = os.Stderr
 	trace(publishCmd)

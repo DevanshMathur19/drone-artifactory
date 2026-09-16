@@ -182,7 +182,7 @@ func ExecCommand(args Args, cmdArgs []string) error {
 
 	cmd := exec.Command(shell, shArg, cmdStr)
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false")
+	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
