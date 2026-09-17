@@ -33,7 +33,7 @@ pipeline:
                   identifier: Run_1
                   spec:
                     connectorRef: Plugins_Docker_Hub_Connector
-                    image: golang:1.25.12
+                    image: golang:1.26.8
                     shell: Sh
                     command: |-
                       go test -cover ./...
@@ -344,8 +344,8 @@ pipeline:
                           <+codebase.build.type> == "branch"
             description: ""
         - stage:
-            name: rf-linux-amd64
-            identifier: rf_linuxamd64
+            name: hhi-linux-amd64
+            identifier: hhi_linuxamd64
             type: CI
             spec:
               cloneCodebase: true
@@ -362,22 +362,22 @@ pipeline:
                 steps:
                   - step:
                       type: GitClone
-                      name: Clone RF Dockerfiles
+                      name: Clone HHI Dockerfiles
                       identifier: clone_rf
                       spec:
                         connectorRef: RapidFortPlugins
+                        cloneDirectory: rf-plugins
                         build:
                           type: branch
                           spec:
                             branch: main
-                        cloneDirectory: rf-plugins
                   - step:
                       name: Build binaries - branch
                       identifier: Run_1
                       type: Run
                       spec:
                         connectorRef: Plugins_Docker_Hub_Connector
-                        image: golang:1.25.12
+                        image: golang:1.26.8
                         shell: Sh
                         command: CGO_ENABLED=0 go build -v -ldflags "-X main.build=<+pipeline.sequenceId>" -a -o release/linux/amd64/plugin
                       when:
@@ -390,7 +390,7 @@ pipeline:
                       type: Run
                       spec:
                         connectorRef: Plugins_Docker_Hub_Connector
-                        image: golang:1.25.12
+                        image: golang:1.26.8
                         shell: Sh
                         command: CGO_ENABLED=0 go build -v -ldflags "-X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>" -a -o release/linux/amd64/plugin
                       when:
@@ -398,7 +398,7 @@ pipeline:
                         condition: <+codebase.build.type> == "tag"
                   - step:
                       type: Plugin
-                      name: RF Build and Push on Tag
+                      name: HHI Build and Push on Tag
                       identifier: rf_docker_build_push_tag
                       spec:
                         connectorRef: Plugins_Docker_Hub_Connector
@@ -407,7 +407,7 @@ pipeline:
                           username: <+secrets.getValue("harnesssecureusername")>
                           password: <+secrets.getValue("dockerHarnessSecurePwd")>
                           repo: harnesssecure/artifactory
-                          dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.amd64.rf
+                          dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.amd64.hhi
                           auto_tag: "true"
                           auto_tag_suffix: linux-amd64
                           base_image_username: <+secrets.getValue("harness0HARUsername")>
@@ -418,7 +418,7 @@ pipeline:
                         condition: <+codebase.build.type> == "tag"
                   - step:
                       type: BuildAndPushDockerRegistry
-                      name: RF Build and Push on Branch
+                      name: HHI Build and Push on Branch
                       identifier: rf_build_push_branch
                       spec:
                         connectorRef: harnesssecure
@@ -426,7 +426,7 @@ pipeline:
                         tags:
                           - linux-amd64
                         caching: false
-                        dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.amd64.rf
+                        dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.amd64.hhi
                         envVariables:
                           PLUGIN_BASE_IMAGE_USERNAME: <+secrets.getValue("harness0HARUsername")>
                           PLUGIN_BASE_IMAGE_PASSWORD: <+secrets.getValue("harness0HARPAT")>
@@ -437,8 +437,8 @@ pipeline:
                           <+codebase.build.type> == "branch"
             description: ""
         - stage:
-            name: rf-linux-arm64
-            identifier: rf_linuxarm64
+            name: hhi-linux-arm64
+            identifier: hhi_linuxarm64
             type: CI
             spec:
               cloneCodebase: true
@@ -455,22 +455,22 @@ pipeline:
                 steps:
                   - step:
                       type: GitClone
-                      name: Clone RF Dockerfiles
+                      name: Clone HHI Dockerfiles
                       identifier: clone_rf
                       spec:
                         connectorRef: RapidFortPlugins
+                        cloneDirectory: rf-plugins
                         build:
                           type: branch
                           spec:
                             branch: main
-                        cloneDirectory: rf-plugins
                   - step:
                       name: Build binaries - branch
                       identifier: Run_1
                       type: Run
                       spec:
                         connectorRef: Plugins_Docker_Hub_Connector
-                        image: golang:1.25.12
+                        image: golang:1.26.8
                         shell: Sh
                         command: CGO_ENABLED=0 go build -v -buildvcs=false -ldflags "-X main.build=<+pipeline.sequenceId>" -a -o release/linux/arm64/plugin
                       when:
@@ -483,7 +483,7 @@ pipeline:
                       type: Run
                       spec:
                         connectorRef: Plugins_Docker_Hub_Connector
-                        image: golang:1.25.12
+                        image: golang:1.26.8
                         shell: Sh
                         command: CGO_ENABLED=0 go build -v -buildvcs=false -ldflags "-X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>" -a -o release/linux/arm64/plugin
                       when:
@@ -491,7 +491,7 @@ pipeline:
                         condition: <+codebase.build.type> == "tag"
                   - step:
                       type: Plugin
-                      name: RF Build and Push on Tag
+                      name: HHI Build and Push on Tag
                       identifier: rf_docker_build_push_tag
                       spec:
                         connectorRef: Plugins_Docker_Hub_Connector
@@ -500,7 +500,7 @@ pipeline:
                           username: <+secrets.getValue("harnesssecureusername")>
                           password: <+secrets.getValue("dockerHarnessSecurePwd")>
                           repo: harnesssecure/artifactory
-                          dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.arm64.rf
+                          dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.arm64.hhi
                           auto_tag: "true"
                           auto_tag_suffix: linux-arm64
                           base_image_username: <+secrets.getValue("harness0HARUsername")>
@@ -511,7 +511,7 @@ pipeline:
                         condition: <+codebase.build.type> == "tag"
                   - step:
                       type: BuildAndPushDockerRegistry
-                      name: RF Build and Push on Branch
+                      name: HHI Build and Push on Branch
                       identifier: rf_build_push_branch
                       spec:
                         connectorRef: harnesssecure
@@ -519,7 +519,7 @@ pipeline:
                         tags:
                           - linux-arm64
                         caching: false
-                        dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.arm64.rf
+                        dockerfile: rf-plugins/drone-artifactory/Dockerfile.linux.arm64.hhi
                         envVariables:
                           PLUGIN_BASE_IMAGE_USERNAME: <+secrets.getValue("harness0HARUsername")>
                           PLUGIN_BASE_IMAGE_PASSWORD: <+secrets.getValue("harness0HARPAT")>
