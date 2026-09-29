@@ -35,9 +35,10 @@ pipeline:
                       type: Run
                       name: Verify 17763 and build plugin
                       identifier: verify_build_17763
+                      timeout: 30m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
-                        image: golang:1.25.12-windowsservercore-1809
+                        image: golang:1.24-windowsservercore-1809
                         shell: Powershell
                         command: |
                           $ErrorActionPreference = 'Stop'
@@ -49,6 +50,7 @@ pipeline:
                       type: BuildAndPushDockerRegistry
                       name: Build and publish LTSC 2019 child
                       identifier: push_ltsc2019_child
+                      timeout: 60m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         repo: devanshmathur19/drone-artifactory
@@ -60,6 +62,7 @@ pipeline:
                       type: Run
                       name: Contract LTSC 2019 child
                       identifier: contract_ltsc2019_child
+                      timeout: 30m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: devanshmathur19/drone-artifactory:1.9.4-elevance.1-windows-1809-amd64-r1
@@ -93,6 +96,7 @@ pipeline:
                       type: Run
                       name: Verify 20348 and build plugin
                       identifier: verify_build_20348
+                      timeout: 30m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: golang:1.25.12-windowsservercore-ltsc2022
@@ -107,6 +111,7 @@ pipeline:
                       type: BuildAndPushDockerRegistry
                       name: Build and publish LTSC 2022 child
                       identifier: push_ltsc2022_child
+                      timeout: 60m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         repo: devanshmathur19/drone-artifactory
@@ -118,6 +123,7 @@ pipeline:
                       type: Run
                       name: Contract LTSC 2022 child
                       identifier: contract_ltsc2022_child
+                      timeout: 30m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: devanshmathur19/drone-artifactory:1.9.4-elevance.1-windows-ltsc2022-amd64-r1
@@ -151,6 +157,7 @@ pipeline:
                       type: Run
                       name: Verify 26100 and build plugin
                       identifier: verify_build_26100
+                      timeout: 30m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: golang:1.25.12
@@ -165,6 +172,7 @@ pipeline:
                       type: BuildAndPushDockerRegistry
                       name: Build and publish LTSC 2025 child
                       identifier: push_ltsc2025_child
+                      timeout: 60m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         repo: devanshmathur19/drone-artifactory
@@ -176,6 +184,7 @@ pipeline:
                       type: Run
                       name: Contract LTSC 2025 child
                       identifier: contract_ltsc2025_child
+                      timeout: 30m
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: devanshmathur19/drone-artifactory:1.9.4-elevance.1-windows-ltsc2025-amd64-r1
