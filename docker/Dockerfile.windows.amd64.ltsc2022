@@ -56,7 +56,7 @@ ENV JAVA_HOME=C:\\tools\\jdk\\jdk-17.0.19+10 `
     PATH="C:\\bin;C:\\PowerShell;C:\\tools\\jdk\\jdk-17.0.19+10\\bin;C:\\tools\\maven\\apache-maven-3.9.11\\bin;C:\\tools\\gradle\\gradle-8.13\\bin;C:\\Windows\\System32;C:\\Windows"
 
 LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" `
-      org.opencontainers.image.revision="c5db420e97e7c23ce3723aac30deae5b3a714c1e" `
+      org.opencontainers.image.revision="3dad7e3ad7bba83a556843f04bad0762059f12c5" `
       org.opencontainers.image.version="1.9.4-elevance.1" `
       io.harness.windows.build="20348" `
       io.harness.release.status="candidate"
