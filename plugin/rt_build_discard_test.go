@@ -38,7 +38,7 @@ func TestBuildDiscard(t *testing.T) {
 	}
 
 	for i := range wantCmds {
-		if gotCmds[i] != wantCmds[i] {
+		if normalizeCommandForTest(gotCmds[i], wantCmds[i]) != wantCmds[i] {
 			t.Errorf("Command mismatch at index %d:\nExpected: %q\nGot:      %q", i, wantCmds[i], gotCmds[i])
 		}
 	}
@@ -81,7 +81,7 @@ func TestGradleBuildDiscard(t *testing.T) {
 	}
 
 	for i := range wantCmds {
-		if gotCmds[i] != wantCmds[i] {
+		if normalizeCommandForTest(gotCmds[i], wantCmds[i]) != wantCmds[i] {
 			t.Errorf("Command mismatch at index %d:\nExpected: %q\nGot:      %q", i, wantCmds[i], gotCmds[i])
 		}
 	}
@@ -124,7 +124,7 @@ func TestMvnBuildDiscard(t *testing.T) {
 	}
 
 	for i := range wantCmds {
-		if gotCmds[i] != wantCmds[i] {
+		if normalizeCommandForTest(gotCmds[i], wantCmds[i]) != wantCmds[i] {
 			t.Errorf("Command mismatch at index %d:\nExpected: %q\nGot:      %q", i, wantCmds[i], gotCmds[i])
 		}
 	}

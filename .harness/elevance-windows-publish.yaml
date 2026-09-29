@@ -45,7 +45,9 @@ pipeline:
                           $actual = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuild
                           if ($actual -ne '17763') { throw "Expected Windows build 17763, got $actual" }
                           go test ./...
+                          if ($LASTEXITCODE -ne 0) { throw "go test failed with exit code $LASTEXITCODE" }
                           go build -v -buildvcs=false -ldflags "-X main.version=1.9.4-elevance.1 -X main.build=<+pipeline.sequenceId>" -o release/windows/amd64/plugin .
+                          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
                   - step:
                       type: BuildAndPushDockerRegistry
                       name: Build and publish LTSC 2019 child
@@ -106,7 +108,9 @@ pipeline:
                           $actual = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuild
                           if ($actual -ne '20348') { throw "Expected Windows build 20348, got $actual" }
                           go test ./...
+                          if ($LASTEXITCODE -ne 0) { throw "go test failed with exit code $LASTEXITCODE" }
                           go build -v -buildvcs=false -ldflags "-X main.version=1.9.4-elevance.1 -X main.build=<+pipeline.sequenceId>" -o release/windows/amd64/plugin .
+                          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
                   - step:
                       type: BuildAndPushDockerRegistry
                       name: Build and publish LTSC 2022 child
@@ -167,7 +171,9 @@ pipeline:
                           $actual = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuild
                           if ($actual -ne '26100') { throw "Expected Windows build 26100, got $actual" }
                           go test ./...
+                          if ($LASTEXITCODE -ne 0) { throw "go test failed with exit code $LASTEXITCODE" }
                           go build -v -buildvcs=false -ldflags "-X main.version=1.9.4-elevance.1 -X main.build=<+pipeline.sequenceId>" -o release/windows/amd64/plugin .
+                          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
                   - step:
                       type: BuildAndPushDockerRegistry
                       name: Build and publish LTSC 2025 child

@@ -1,6 +1,7 @@
 # escape=`
 
 ARG BUILDER_IMAGE=mcr.microsoft.com/windows/servercore@sha256:e10503b9a4f7faafa30aa0f5d0e8e7f7ca30a4496b3b87d61178b4d7c6815fb5
+ARG RUNTIME_IMAGE=mcr.microsoft.com/windows/nanoserver@sha256:87af42244113104b3ce4b5646f9ec1ab6690e6753dd68924e698bdc2132546b3
 FROM ${BUILDER_IMAGE} AS builder
 SHELL ["powershell", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
@@ -34,7 +35,6 @@ RUN New-Item -ItemType Directory -Force C:/downloads,C:/tools/jdk,C:/tools/maven
     certutil -generateSSTFromWU C:/certificates/ca-certificates.sst | Out-Null; `
     Remove-Item C:/downloads/*.zip -Force
 
-ARG RUNTIME_IMAGE=mcr.microsoft.com/windows/nanoserver@sha256:87af42244113104b3ce4b5646f9ec1ab6690e6753dd68924e698bdc2132546b3
 FROM ${RUNTIME_IMAGE}
 USER ContainerAdministrator
 COPY --from=builder C:/PowerShell C:/PowerShell

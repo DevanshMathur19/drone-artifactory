@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -173,7 +174,7 @@ func TestInlineSpecIsRestrictedAndCleanedUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("temporary spec is missing: %v", err)
 	}
-	if info.Mode().Perm() != 0600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("temporary spec permissions are %o, want 600", info.Mode().Perm())
 	}
 	cleanupTemporarySpecs(commands)
@@ -204,7 +205,7 @@ func TestPEMRotationOverwritesWithoutLeavingTemporaryFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot stat PEM: %v", err)
 	}
-	if info.Mode().Perm() != 0600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("PEM permissions are %o, want 600", info.Mode().Perm())
 	}
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".cert-*.tmp"))

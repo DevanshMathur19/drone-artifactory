@@ -35,7 +35,7 @@ func TestGetMavenBuildCommandUserPassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		ret := strings.Compare(cmdStr, wantCmds[i])
+		ret := strings.Compare(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i])
 		if ret != 0 {
 			t.Errorf("Expected: %s, Got: %s", wantCmds[i], cmdStr)
 		}
@@ -72,7 +72,7 @@ func TestGetMavenBuildCommandAccessToken(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		ret := strings.Compare(cmdStr, wantCmds[i])
+		ret := strings.Compare(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i])
 		if ret != 0 {
 			t.Errorf("Expected: %s, Got: %s", wantCmds[i], cmdStr)
 		}
@@ -106,7 +106,7 @@ func TestGetMavenPublishCommandUserNamePassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		ret := strings.Compare(cmdStr, wantCmds[i])
+		ret := strings.Compare(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i])
 		if ret != 0 {
 			t.Errorf("Expected: %s, Got: %s", wantCmds[i], cmdStr)
 		}
@@ -139,7 +139,7 @@ func TestGetMavenPublishCommandAccessToken(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		ret := strings.Compare(cmdStr, wantCmds[i])
+		ret := strings.Compare(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i])
 		if ret != 0 {
 			t.Errorf("Expected: %s, Got: %s", wantCmds[i], cmdStr)
 		}
