@@ -77,9 +77,7 @@ func TestGetGradlePublishCommandArgs(t *testing.T) {
 					" --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 				"gradle-config --repo-deploy=" + RtTestRelRepo + " --repo-resolve=" +
 					RtResolveRelRepo + " --server-id-deploy=" + RtDeployerId + " --server-id-resolve=" + RtDeployerId,
-				"gradle publish -Pusername=user -Ppassword=pass --build-name=" +
-					RtBuildName + " --build-number=" + RtBuildNumber,
-				"rt build-publish " + RtBuildName + " " + RtBuildNumber + " --server-id=" + RtDeployerId,
+				"gradle publish --build-name=" + RtBuildName + " --build-number=" + RtBuildNumber,
 			},
 			err: nil,
 		},

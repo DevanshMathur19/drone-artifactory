@@ -3,6 +3,8 @@ package plugin
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -28,18 +30,26 @@ func GetDownloadCommandArgs(args Args) ([][]string, error) {
 	}
 
 	if args.Spec != "" {
-		fileName := getTimestampedFileName()
-		err = writeToFile(fileName, args.Spec)
+		fileName, tempErr := writeTemporarySpec(args.Spec)
+		err = tempErr
 		if err != nil {
 			return cmdList, err
 		}
 		args.Spec = ""
 		args.SpecPath = fileName
+	} else if args.SpecPath == "" {
+		if args.Source == "" {
+			return nil, fmt.Errorf("download source needs to be set when no spec is provided")
+		}
+		if args.Target == "" {
+			return nil, fmt.Errorf("download target needs to be set when no spec is provided")
+		}
 	}
 
 	downloadCommandArgs = append(downloadCommandArgs, authParams...)
-	downloadCommandArgs = append(downloadCommandArgs, args.Target, args.Source)
-	downloadCommandArgs = append(downloadCommandArgs)
+	if args.SpecPath == "" {
+		downloadCommandArgs = append(downloadCommandArgs, args.Source, args.Target)
+	}
 
 	err = PopulateArgs(&downloadCommandArgs, &args, DownloadCmdJsonTagToExeFlagMapStringItemList)
 	if err != nil {
@@ -58,7 +68,7 @@ func GetCleanupCommandArgs(args Args) ([][]string, error) {
 }
 
 func writeToFile(filePath, content string) error {
-	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %v", err)
 	}
@@ -70,6 +80,48 @@ func writeToFile(filePath, content string) error {
 	}
 
 	return nil
+}
+
+func writeTemporarySpec(content string) (string, error) {
+	file, err := os.CreateTemp("", "drone-artifactory-*.spec.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary spec: %w", err)
+	}
+	path := file.Name()
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		os.Remove(path)
+		return "", fmt.Errorf("failed to secure temporary spec: %w", err)
+	}
+	if _, err := file.WriteString(content); err != nil {
+		file.Close()
+		os.Remove(path)
+		return "", fmt.Errorf("failed to write temporary spec: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		os.Remove(path)
+		return "", fmt.Errorf("failed to close temporary spec: %w", err)
+	}
+	return path, nil
+}
+
+func cleanupTemporarySpecs(commands [][]string) {
+	prefix := filepath.Clean(os.TempDir()) + string(os.PathSeparator)
+	for _, command := range commands {
+		for _, arg := range command {
+			if !strings.HasPrefix(arg, "--spec=") {
+				continue
+			}
+			path := filepath.Clean(strings.TrimPrefix(arg, "--spec="))
+			if strings.HasPrefix(path, prefix) &&
+				strings.HasPrefix(filepath.Base(path), "drone-artifactory-") &&
+				strings.HasSuffix(path, ".spec.json") {
+				if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+					fmt.Fprintf(os.Stderr, "failed to remove temporary Artifactory spec %q: %v\n", path, err)
+				}
+			}
+		}
+	}
 }
 
 func getTimestampedFileName() string {

@@ -1,105 +1,64 @@
 # escape=`
 
-# ---------------------------------------------------------------------------
-# drone-artifactory for Windows Server 2025 (LTSC 2025)
-# ---------------------------------------------------------------------------
+ARG BUILDER_IMAGE=mcr.microsoft.com/windows/servercore@sha256:22505496dd4229dba63453ba0c6dc31c06fd3e11810e5b8e429aa6b16dab2457
+FROM ${BUILDER_IMAGE} AS builder
+SHELL ["powershell", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
-# Stage 1: builder -- download JFrog CLI, JDK, Maven, Gradle and certificates.
-# Uses servercore because it ships Windows PowerShell 5.1 (needed for
-# Invoke-WebRequest + Expand-Archive + certutil in a single RUN).
-FROM mcr.microsoft.com/windows/servercore:ltsc2025 AS builder
-SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+RUN New-Item -ItemType Directory -Force C:/downloads,C:/tools/jdk,C:/tools/maven,C:/tools/gradle,C:/PowerShell,C:/certificates | Out-Null; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe" -OutFile "C:/downloads/jfrog.exe"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/downloads/jfrog.exe").Hash.ToLowerInvariant() -ne "c3997e333dd1d70defe77783dc5ee7fcb5bd537ecb45e57e8b3fb6e2efa41d6c") { throw "JFrog CLI SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.19%2B10/OpenJDK17U-jdk_x64_windows_hotspot_17.0.19_10.zip" -OutFile "C:/downloads/jdk.zip"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/downloads/jdk.zip").Hash.ToLowerInvariant() -ne "b5b235c48adf6a081874b812c630b9f4b5f637b7a5ed18b9174d08a41ec4c235") { throw "Temurin SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip" -OutFile "C:/downloads/maven.zip"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/downloads/maven.zip").Hash.ToLowerInvariant() -ne "0d7125e8c91097b36edb990ea5934e6c68b4440eef4ea96510a0f6815e7eeadb") { throw "Maven SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://services.gradle.org/distributions/gradle-8.13-bin.zip" -OutFile "C:/downloads/gradle.zip"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/downloads/gradle.zip").Hash.ToLowerInvariant() -ne "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78") { throw "Gradle SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/PowerShell/PowerShell/releases/download/v7.4.13/PowerShell-7.4.13-win-x64.zip" -OutFile "C:/downloads/powershell.zip"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/downloads/powershell.zip").Hash.ToLowerInvariant() -ne "8fb52d2172d285b230c2857a90ba4dd28ecf6477ba4a91f91b6854a647b33b65") { throw "PowerShell SHA-256 mismatch" }; `
+    Expand-Archive "C:/downloads/jdk.zip" -DestinationPath "C:/tools/jdk"; `
+    Expand-Archive "C:/downloads/maven.zip" -DestinationPath "C:/tools/maven"; `
+    Expand-Archive "C:/downloads/gradle.zip" -DestinationPath "C:/tools/gradle"; `
+    Expand-Archive "C:/downloads/powershell.zip" -DestinationPath "C:/PowerShell"; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.21.5/jackson-databind-2.21.5.jar" -OutFile "C:/tools/gradle/gradle-8.13/lib/jackson-databind-2.16.1.jar"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/tools/gradle/gradle-8.13/lib/jackson-databind-2.16.1.jar").Hash.ToLowerInvariant() -ne "507418c0fafd38b2b2cfb704521630da613a8e4cc8381195a6f418017883e2c0") { throw "jackson-databind SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.21.5/jackson-core-2.21.5.jar" -OutFile "C:/tools/gradle/gradle-8.13/lib/jackson-core-2.16.1.jar"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/tools/gradle/gradle-8.13/lib/jackson-core-2.16.1.jar").Hash.ToLowerInvariant() -ne "b64b5874162b503a0e58a8f7758266e8dd9f91bf49e3a59ae0b5f47589a231b7") { throw "jackson-core SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.21/jackson-annotations-2.21.jar" -OutFile "C:/tools/gradle/gradle-8.13/lib/jackson-annotations-2.16.1.jar"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/tools/gradle/gradle-8.13/lib/jackson-annotations-2.16.1.jar").Hash.ToLowerInvariant() -ne "53ca085f4a150f703f49e1aabd935bd03b43e1ea3d55d135438292af22cef56b") { throw "jackson-annotations SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85/bcprov-jdk18on-1.85.jar" -OutFile "C:/tools/gradle/gradle-8.13/lib/plugins/bcprov-jdk18on-1.78.1.jar"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/tools/gradle/gradle-8.13/lib/plugins/bcprov-jdk18on-1.78.1.jar").Hash.ToLowerInvariant() -ne "20af26bf6060bb8005cc2389916812c1e0e998dc48d2ced7131b89461b54cff7") { throw "bcprov SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/org/bouncycastle/bcpg-jdk18on/1.85/bcpg-jdk18on-1.85.jar" -OutFile "C:/tools/gradle/gradle-8.13/lib/plugins/bcpg-jdk18on-1.78.1.jar"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/tools/gradle/gradle-8.13/lib/plugins/bcpg-jdk18on-1.78.1.jar").Hash.ToLowerInvariant() -ne "39426367dc247dfaae9b1253457a39298b6b9a6c28a39b908bca829e315323dd") { throw "bcpg SHA-256 mismatch" }; `
+    Invoke-WebRequest -UseBasicParsing -Uri "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar" -OutFile "C:/tools/gradle/gradle-8.13/lib/commons-lang3-3.14.0.jar"; `
+    if ((Get-FileHash -Algorithm SHA256 "C:/tools/gradle/gradle-8.13/lib/commons-lang3-3.14.0.jar").Hash.ToLowerInvariant() -ne "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720") { throw "commons-lang3 SHA-256 mismatch" }; `
+    certutil -generateSSTFromWU C:/certificates/ca-certificates.sst | Out-Null; `
+    Remove-Item C:/downloads/*.zip -Force
 
-# Set versions (unchanged from ltsc2022 sibling)
-ENV JDK_VERSION="17.0.19+10"
-ENV MAVEN_VERSION="3.9.11"
-ENV GRADLE_VERSION="8.13"
-
-# Create necessary directories
-RUN mkdir C:\bin | Out-Null; `
-    mkdir C:\certificates | Out-Null; `
-    mkdir C:\jdk | Out-Null; `
-    mkdir C:\maven | Out-Null; `
-    mkdir C:\gradle | Out-Null; `
-    mkdir -Path C:\users\ContainerAdministrator\.jfrog\security\certs | Out-Null
-
-# Copy CA certificates
-COPY docker/cert.windows.pem docker/cacert.pem C:\users\ContainerAdministrator\.jfrog\security\certs\
-
-# Generate CA certificates and download/install tools in a single layer
-RUN certutil -generateSSTFromWU C:\certificates\ca-certificates.sst; `
-    `
-    # Download JFrog CLI (CVE-2026-39821: bumped to 2.115.0 for golang.org/x/net/idna improper authentication fix)
-    Invoke-WebRequest -Uri https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe -OutFile C:\bin\jfrog.exe; `
-    `
-    # Download and install JDK
-    Invoke-WebRequest -Uri "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.19%2B10/OpenJDK17U-jdk_x64_windows_hotspot_17.0.19_10.zip" -OutFile "C:\jdk.zip"; `
-    Expand-Archive -Path "C:\jdk.zip" -DestinationPath "C:\jdk"; `
-    `
-    # Download and install Maven
-    Invoke-WebRequest -Uri https://repo1.maven.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip -OutFile C:\maven.zip; `
-    Expand-Archive -Path C:\maven.zip -DestinationPath C:\maven; `
-    `
-    # Download and install Gradle
-    Invoke-WebRequest -Uri "https://services.gradle.org/distributions/gradle-8.13-bin.zip" -OutFile "C:\gradle.zip"; `
-    Expand-Archive -Path "C:\gradle.zip" -DestinationPath "C:\gradle"; `
-    `
-    # Patch vulnerable jars bundled in Gradle (overwrite in place, keep original filenames for classpath compatibility)
-    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.21.5/jackson-databind-2.21.5.jar" -OutFile "C:\gradle\gradle-8.13\lib\jackson-databind-2.16.1.jar"; `
-    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.21.5/jackson-core-2.21.5.jar" -OutFile "C:\gradle\gradle-8.13\lib\jackson-core-2.16.1.jar"; `
-    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.21/jackson-annotations-2.21.jar" -OutFile "C:\gradle\gradle-8.13\lib\jackson-annotations-2.16.1.jar"; `
-    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85/bcprov-jdk18on-1.85.jar" -OutFile "C:\gradle\gradle-8.13\lib\plugins\bcprov-jdk18on-1.78.1.jar"; `
-    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/bouncycastle/bcpg-jdk18on/1.85/bcpg-jdk18on-1.85.jar" -OutFile "C:\gradle\gradle-8.13\lib\plugins\bcpg-jdk18on-1.78.1.jar"; `
-    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar" -OutFile "C:\gradle\gradle-8.13\lib\commons-lang3-3.14.0.jar"
-
-
-# Stage 2: PowerShell 7 installer stage.
-# nanoserver:ltsc2025 does not ship PowerShell, and there is no
-# mcr.microsoft.com/powershell:*-ltsc2025 base yet. We install PS 7.4.6
-# manually to preserve the same runtime shape as the ltsc2022 base image.
-FROM mcr.microsoft.com/windows/servercore:ltsc2025 AS installer-env
-SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command"]
-RUN $ProgressPreference = 'SilentlyContinue'; `
-    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; `
-    Invoke-WebRequest -Uri "https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/PowerShell-7.4.6-win-x64.zip" -OutFile C:\powershell.zip -UseBasicParsing; `
-    Expand-Archive C:\powershell.zip -DestinationPath C:\PowerShell
-
-# Final image: nanoserver:ltsc2025 with PowerShell 7.4.6 + JFrog/JDK/Maven/Gradle
-# copied in from the builder stage.
-FROM mcr.microsoft.com/windows/nanoserver:ltsc2025
-
-# Create directories with proper permissions for JFrog CLI and plugin operations
+ARG RUNTIME_IMAGE=mcr.microsoft.com/windows/nanoserver@sha256:4fe6f59e0aadb628a933345eae1f5ab43a2af802969ac0e2ef996c66a3188438
+FROM ${RUNTIME_IMAGE}
 USER ContainerAdministrator
-RUN mkdir C:\bin C:\certificates C:\temp C:\uploads C:\jdk C:\maven C:\gradle
-
-# Copy certificates, JFrog CLI, JDK, Maven, and Gradle from builder stage
-COPY --from=builder C:\certificates C:\certificates
-COPY --from=builder C:\users\ContainerAdministrator\.jfrog C:\users\ContainerAdministrator\.jfrog
-COPY --from=builder C:\bin\jfrog.exe C:\bin\jfrog.exe
-COPY --from=builder C:\jdk C:\jdk
-COPY --from=builder C:\maven C:\maven
-COPY --from=builder C:\gradle C:\gradle
-
-# Copy PowerShell 7.4.6 payload from installer-env stage.
-#
-# We put it at C:\PowerShell (not C:\Program Files\PowerShell\latest) because
-# Docker's COPY on Windows silently fails (exit 1, no message) when the
-# destination path contains a space AND ends with a trailing backslash. Using
-# a space-free path sidesteps that quirk. `pwsh.exe` is on PATH either way.
-COPY --from=installer-env C:\PowerShell C:\PowerShell
-
-# Set environment variables
-# Note: nanoserver:ltsc2025 does NOT include Windows PowerShell 5.1, so
-# `powershell` will not resolve -- use `pwsh` (PowerShell 7) instead.
-ENV GODEBUG=netdns=go
-ENV PATH="C:\bin;C:\jdk\jdk-17.0.19+10\bin;C:\maven\apache-maven-3.9.11\bin;C:\gradle\gradle-8.13\bin;C:\Windows\System32;C:\Windows;C:\PowerShell"
-ENV JAVA_HOME="C:\jdk\jdk-17.0.19+10"
-ENV MAVEN_HOME="C:\maven\apache-maven-3.9.11"
-ENV GRADLE_HOME="C:\gradle\gradle-8.13"
-# Add environment variable to prevent interactive prompts
-ENV CI="true"
-
-# Add plugin executable
+COPY --from=builder C:/PowerShell C:/PowerShell
+SHELL ["C:\\PowerShell\\pwsh.exe", "-NoLogo", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+RUN New-Item -ItemType Directory -Force C:/bin,C:/temp,C:/uploads,C:/users/ContainerAdministrator/.jfrog/security/certs | Out-Null
+COPY --from=builder C:/downloads/jfrog.exe C:/bin/jfrog.exe
+COPY --from=builder C:/downloads/jfrog.exe C:/bin/jf.exe
+COPY --from=builder C:/tools/jdk C:/tools/jdk
+COPY --from=builder C:/tools/maven C:/tools/maven
+COPY --from=builder C:/tools/gradle C:/tools/gradle
+COPY --from=builder C:/certificates C:/certificates
 COPY release/windows/amd64/plugin C:/bin/drone-artifactory.exe
 
-ENTRYPOINT [ "C:\\bin\\drone-artifactory.exe" ]
+ENV JAVA_HOME=C:\\tools\\jdk\\jdk-17.0.19+10 `
+    MAVEN_HOME=C:\\tools\\maven\\apache-maven-3.9.11 `
+    GRADLE_HOME=C:\\tools\\gradle\\gradle-8.13 `
+    CI=true `
+    GODEBUG=netdns=go `
+    PATH="C:\\bin;C:\\PowerShell;C:\\tools\\jdk\\jdk-17.0.19+10\\bin;C:\\tools\\maven\\apache-maven-3.9.11\\bin;C:\\tools\\gradle\\gradle-8.13\\bin;C:\\Windows\\System32;C:\\Windows"
+
+LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" `
+      org.opencontainers.image.revision="c5db420e97e7c23ce3723aac30deae5b3a714c1e" `
+      org.opencontainers.image.version="1.9.4-elevance.1" `
+      io.harness.windows.build="26100" `
+      io.harness.release.status="candidate"
+
+ENTRYPOINT ["C:\\bin\\drone-artifactory.exe"]

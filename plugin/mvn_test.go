@@ -101,7 +101,6 @@ func TestGetMavenPublishCommandUserNamePassword(t *testing.T) {
 		"config add deploy_gen_maven_01 --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"mvn-config --repo-deploy-releases=mvn_repo_deploy_releases_01 --repo-deploy-snapshots=mvn_repo_deploy_snapshots_01",
 		"mvn deploy --build-name=t2 --build-number=v1.0",
-		"rt build-publish t2 v1.0 --server-id=deploy_gen_maven_01",
 	}
 	_ = wantCmds
 
@@ -135,7 +134,6 @@ func TestGetMavenPublishCommandAccessToken(t *testing.T) {
 		"config add deploy_gen_maven_01 --url=https://artifactory.test.io/artifactory/ --access-token $PLUGIN_ACCESS_TOKEN --interactive=false",
 		"mvn-config --repo-deploy-releases=mvn_repo_deploy_releases_01 --repo-deploy-snapshots=mvn_repo_deploy_snapshots_01",
 		"mvn deploy --build-name=t2 --build-number=v1.0",
-		"rt build-publish t2 v1.0 --server-id=deploy_gen_maven_01",
 	}
 	_ = wantCmds
 
