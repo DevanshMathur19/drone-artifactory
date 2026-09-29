@@ -6,7 +6,8 @@ pipeline:
   properties:
     ci:
       codebase:
-        repoName: drone-artifactory
+        connectorRef: rpgithub
+        repoName: DevanshMathur19/drone-artifactory
         build: <+input>
   variables:
     - {name: dockerConnector, type: String, value: <+input>.default(dmdockerconn)}
