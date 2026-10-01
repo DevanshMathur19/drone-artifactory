@@ -238,6 +238,110 @@ func TestParseJFrogDetailedSummary_BaseURLTrailingSlashNormalised(t *testing.T) 
 	}
 }
 
+func TestParseJFrogDetailedSummary_AbsoluteTargetURL(t *testing.T) {
+	raw := jfrogOutput(`{
+  "status": "success",
+  "totals": {"success": 1, "failure": 0},
+  "files": [{
+    "source": "myfolder/app.jar",
+    "target": "https://example.jfrog.io/artifactory/libs-release/app.jar",
+    "sha256": "deadbeef"
+  }]
+}`)
+
+	got := parseJFrogDetailedSummary(raw, baseURL)
+	if len(got) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(got))
+	}
+	e := got[0]
+	if e.URL != "https://example.jfrog.io/artifactory/libs-release/app.jar" {
+		t.Errorf("url: connector base URL must not be duplicated, got %q", e.URL)
+	}
+	if e.FilePath != "libs-release/app.jar" {
+		t.Errorf("filePath: want repo-relative path, got %q", e.FilePath)
+	}
+	if e.Name != "app.jar" {
+		t.Errorf("name: want app.jar, got %q", e.Name)
+	}
+	if e.Digest != "sha256:deadbeef" {
+		t.Errorf("digest: want sha256:deadbeef, got %q", e.Digest)
+	}
+}
+
+func TestParseJFrogDetailedSummary_AbsoluteTargetURLDifferentBase(t *testing.T) {
+	// Absolute target URL not rooted at the connector base URL: use it as-is
+	// for the URL and derive filePath from the URL path portion.
+	raw := jfrogOutput(`{
+  "status": "success",
+  "files": [{
+    "source": "dist/app.jar",
+    "target": "https://other.jfrog.io/artifactory/repo/app.jar",
+    "sha256": "abc"
+  }]
+}`)
+
+	got := parseJFrogDetailedSummary(raw, baseURL)
+	if len(got) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(got))
+	}
+	if got[0].URL != "https://other.jfrog.io/artifactory/repo/app.jar" {
+		t.Errorf("url: got %q", got[0].URL)
+	}
+	if got[0].FilePath != "artifactory/repo/app.jar" {
+		t.Errorf("filePath: want URL path portion, got %q", got[0].FilePath)
+	}
+}
+
+func TestResolveArtifactURLAndPath(t *testing.T) {
+	cases := []struct {
+		name     string
+		base     string
+		target   string
+		wantURL  string
+		wantPath string
+	}{
+		{
+			name:     "relative target",
+			base:     "https://example.jfrog.io/artifactory",
+			target:   "repo/f.jar",
+			wantURL:  "https://example.jfrog.io/artifactory/repo/f.jar",
+			wantPath: "repo/f.jar",
+		},
+		{
+			name:     "relative target with leading slash",
+			base:     "https://example.jfrog.io/artifactory",
+			target:   "/repo/f.jar",
+			wantURL:  "https://example.jfrog.io/artifactory/repo/f.jar",
+			wantPath: "/repo/f.jar",
+		},
+		{
+			name:     "absolute target under base",
+			base:     "https://example.jfrog.io/artifactory",
+			target:   "https://example.jfrog.io/artifactory/repo/f.jar",
+			wantURL:  "https://example.jfrog.io/artifactory/repo/f.jar",
+			wantPath: "repo/f.jar",
+		},
+		{
+			name:     "absolute target outside base",
+			base:     "https://example.jfrog.io/artifactory",
+			target:   "https://other.io/artifactory/repo/f.jar",
+			wantURL:  "https://other.io/artifactory/repo/f.jar",
+			wantPath: "artifactory/repo/f.jar",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotURL, gotPath := resolveArtifactURLAndPath(tc.base, tc.target)
+			if gotURL != tc.wantURL {
+				t.Errorf("url: want %q, got %q", tc.wantURL, gotURL)
+			}
+			if gotPath != tc.wantPath {
+				t.Errorf("filePath: want %q, got %q", tc.wantPath, gotPath)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // resolveSource
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,19 +151,35 @@ func parseJFrogDetailedSummary(output []byte, baseURL string) []fileArtifactEntr
 			logrus.Warnf("artifact: JFrog summary entry has empty paths (sourcePath=%q targetPath=%q) — skipping", f.SourcePath, f.TargetPath)
 			continue
 		}
+		artifactURL, filePath := resolveArtifactURLAndPath(base, f.TargetPath)
 		entries = append(entries, fileArtifactEntry{
 			Name:     filepath.Base(f.SourcePath),
-			URL:      base + "/" + f.TargetPath,
-			FilePath: f.TargetPath,
+			URL:      artifactURL,
+			FilePath: filePath,
 			Digest:   digest,
 		})
 	}
 	return entries
 }
 
-// collectArtifactEntries resolves the source pattern to local files,
-// computes SHA256 for each, and builds the list of artifact entries.
-// Returns nil if a spec file is used or source/target are not set.
+// resolveArtifactURLAndPath returns the artifact URL and the repo-relative file
+// path for a JFrog detailed-summary target. JFrog CLI v2 returns a fully-qualified
+// URL in target for uploads, so the connector base URL must not be prepended again;
+// the file path is then derived by stripping that base (CI-24977).
+func resolveArtifactURLAndPath(base, target string) (string, string) {
+	target = strings.TrimSpace(target)
+	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
+		if rel, found := strings.CutPrefix(target, base+"/"); found {
+			return target, rel
+		}
+		if u, err := url.Parse(target); err == nil && u.Path != "" {
+			return target, strings.TrimLeft(u.Path, "/")
+		}
+		return target, target
+	}
+	return base + "/" + strings.TrimLeft(target, "/"), target
+}
+
 func collectArtifactEntries(args Args) []fileArtifactEntry {
 	if args.Spec != "" || args.Source == "" || args.Target == "" {
 		return nil
