@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"fmt"
 	"runtime"
 
 	"github.com/sirupsen/logrus"
@@ -122,31 +121,12 @@ func GetGradlePublishCommand(args Args) ([][]string, error) {
 	gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-resolve="+tmpServerId)
 
 	rtPublishCommandArgs := []string{"gradle", Publish}
-	switch {
-	case args.Username != "":
-		rtPublishCommandArgs = append(rtPublishCommandArgs, "-Pusername="+args.Username)
-		rtPublishCommandArgs = append(rtPublishCommandArgs, "-Ppassword="+args.Password)
-	case args.AccessToken != "":
-		errMsg := "AccessToken is not supported for Gradle" +
-			" try username: <username> , password: <access_token> instead"
-		logrus.Println(errMsg)
-		return cmdList, fmt.Errorf("%s", errMsg)
-	}
 	rtPublishCommandArgs = append(rtPublishCommandArgs, "--build-name="+args.BuildName)
 	rtPublishCommandArgs = append(rtPublishCommandArgs, "--build-number="+args.BuildNumber)
-
-	rtPublishBuildInfoCommandArgs := []string{"rt", BuildPublish, args.BuildName, args.BuildNumber,
-		"--server-id=" + tmpServerId}
-	err = PopulateArgs(&rtPublishBuildInfoCommandArgs, &args, RtBuildInfoPublishCmdJsonTagToExeFlagMap)
-	if err != nil {
-		logrus.Println("PopulateArgs error: ", err)
-		return cmdList, err
-	}
 
 	cmdList = append(cmdList, jfrogConfigAddConfigCommandArgs)
 	cmdList = append(cmdList, gradleConfigCommandArgs)
 	cmdList = append(cmdList, rtPublishCommandArgs)
-	cmdList = append(cmdList, rtPublishBuildInfoCommandArgs)
 
 	if IsBuildDiscardArgs(args) {
 		buildDiscardBuildArgsList, err := GetBuildDiscardCommandArgs(args)

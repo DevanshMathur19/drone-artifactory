@@ -118,18 +118,9 @@ func GetMavenPublishCommand(args Args) ([][]string, error) {
 		return cmdList, err
 	}
 
-	rtPublishBuildInfoCommandArgs := []string{"rt", BuildPublish, args.BuildName, args.BuildNumber,
-		"--server-id=" + tmpServerId}
-	err = PopulateArgs(&rtPublishBuildInfoCommandArgs, &args, RtBuildInfoPublishCmdJsonTagToExeFlagMap)
-	if err != nil {
-		logrus.Println("PopulateArgs error: ", err)
-		return cmdList, err
-	}
-
 	cmdList = append(cmdList, jfrogConfigAddConfigCommandArgs)
 	cmdList = append(cmdList, mvnConfigCommandArgs)
 	cmdList = append(cmdList, rtPublishCommandArgs)
-	cmdList = append(cmdList, rtPublishBuildInfoCommandArgs)
 
 	if IsBuildDiscardArgs(args) {
 		buildDiscardBuildArgsList, err := GetBuildDiscardCommandArgs(args)

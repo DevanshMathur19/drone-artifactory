@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -109,6 +109,11 @@ type Args struct {
 
 // Exec executes the plugin.
 func Exec(ctx context.Context, args Args) error {
+	enableProxy := parseBoolOrDefault(false, args.EnableProxy)
+	if enableProxy {
+		logrus.Printf("setting proxy config for Artifactory command")
+		setSecureConnectProxies()
+	}
 
 	if args.OidcToken != "" {
 		if args.URL == "" {
@@ -129,13 +134,7 @@ func Exec(ctx context.Context, args Args) error {
 	logrus.Println("Checking RT commands")
 	if args.BuildTool != "" || args.Command != "" {
 		logrus.Println("Handling rt command handleRtCommand")
-		return HandleRtCommands(args)
-	}
-
-	enableProxy := parseBoolOrDefault(false, args.EnableProxy)
-	if enableProxy {
-		logrus.Printf("setting proxy config for upload")
-		setSecureConnectProxies()
+		return HandleRtCommands(ctx, args)
 	}
 
 	// write code here
@@ -174,35 +173,8 @@ func Exec(ctx context.Context, args Args) error {
 		cmdArgs = append(cmdArgs, fmt.Sprintf("--build-name='%s'", args.BuildName))
 	}
 
-	// create pem file
-	if args.PEMFileContents != "" && !insecure {
-		var path string
-		// figure out path to write pem file
-		if args.PEMFilePath == "" {
-			if runtime.GOOS == "windows" {
-				path = "C:/users/ContainerAdministrator/.jfrog/security/certs/cert.pem"
-			} else {
-				path = "/root/.jfrog/security/certs/cert.pem"
-			}
-		} else {
-			path = args.PEMFilePath
-		}
-		fmt.Printf("Creating pem file at %q\n", path)
-		// write pen contents to path
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			// remove filename from path
-			dir := filepath.Dir(path)
-			pemFolderErr := os.MkdirAll(dir, 0700)
-			if pemFolderErr != nil {
-				return fmt.Errorf("error creating pem folder: %s", pemFolderErr)
-			}
-			// write pem contents
-			pemWriteErr := os.WriteFile(path, []byte(args.PEMFileContents), 0600)
-			if pemWriteErr != nil {
-				return fmt.Errorf("error writing pem file: %s", pemWriteErr)
-			}
-			fmt.Printf("Successfully created pem file at %q\n", path)
-		}
+	if err := WriteKnownGoodServerCertsForTls(args); err != nil {
+		return err
 	}
 	// Take in spec file or use source/target arguments
 	if args.Spec != "" {
@@ -226,9 +198,12 @@ func Exec(ctx context.Context, args Args) error {
 
 	cmdStr := strings.Join(cmdArgs[:], " ")
 
-	shell, shArg := getShell()
+	shell, shArg, err := getShell()
+	if err != nil {
+		return err
+	}
 
-	cmd := exec.Command(shell, shArg, cmdStr)
+	cmd := exec.CommandContext(ctx, shell, shArg, cmdStr)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
 
@@ -241,7 +216,7 @@ func Exec(ctx context.Context, args Args) error {
 	cmd.Stderr = os.Stderr
 	trace(cmd)
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
@@ -258,7 +233,7 @@ func Exec(ctx context.Context, args Args) error {
 
 	// Call publishBuildInfo if PLUGIN_PUBLISH_BUILD_INFO is set to true
 	if args.PublishBuildInfo {
-		if err := publishBuildInfo(args); err != nil {
+		if err := publishBuildInfo(ctx, args); err != nil {
 			return err
 		}
 	}
@@ -266,7 +241,7 @@ func Exec(ctx context.Context, args Args) error {
 	return nil
 }
 
-func publishBuildInfo(args Args) error {
+func publishBuildInfo(ctx context.Context, args Args) error {
 	if args.BuildName == "" || args.BuildNumber == "" {
 		return fmt.Errorf("both build name and build number need to be set when publishing build info")
 	}
@@ -295,8 +270,11 @@ func publishBuildInfo(args Args) error {
 	}
 
 	publishCmdStr := strings.Join(publishCmdArgs, " ")
-	shell, shArg := getShell()
-	publishCmd := exec.Command(shell, shArg, publishCmdStr)
+	shell, shArg, err := getShell()
+	if err != nil {
+		return err
+	}
+	publishCmd := exec.CommandContext(ctx, shell, shArg, publishCmdStr)
 	publishCmd.Env = os.Environ()
 	publishCmd.Env = append(publishCmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
 	publishCmd.Stdout = os.Stdout
@@ -373,18 +351,47 @@ func setAuthParams(cmdArgs []string, args Args) ([]string, error) {
 	return cmdArgs, nil
 }
 
-func getShell() (string, string) {
-	if runtime.GOOS == "windows" {
-		// First check for PowerShell Core (pwsh.exe) which is used in PowerShell Nanoserver
-		if _, err := os.Stat("C:/Program Files/PowerShell/pwsh.exe"); err == nil {
-			return "pwsh", "-Command"
-		}
+func getShell() (string, string, error) {
+	return resolveShell(runtime.GOOS, exec.LookPath, os.Stat)
+}
 
-		// Fall back to traditional PowerShell
-		return "powershell", "-Command"
+func resolveShell(
+	osName string,
+	lookPath func(string) (string, error),
+	stat func(string) (os.FileInfo, error),
+) (string, string, error) {
+	if osName != "windows" {
+		return "sh", "-c", nil
 	}
 
-	return "sh", "-c"
+	for _, name := range []string{"pwsh", "pwsh.exe"} {
+		if path, err := lookPath(name); err == nil {
+			return path, "-Command", nil
+		}
+	}
+	for _, path := range []string{
+		"C:/PowerShell/pwsh.exe",
+		"C:/Program Files/PowerShell/7/pwsh.exe",
+		"C:/Program Files/PowerShell/pwsh.exe",
+	} {
+		if _, err := stat(path); err == nil {
+			return path, "-Command", nil
+		}
+	}
+	for _, name := range []string{"powershell", "powershell.exe"} {
+		if path, err := lookPath(name); err == nil {
+			return path, "-Command", nil
+		}
+	}
+	for _, path := range []string{
+		"C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+		"C:/Windows/SysWOW64/WindowsPowerShell/v1.0/powershell.exe",
+	} {
+		if _, err := stat(path); err == nil {
+			return path, "-Command", nil
+		}
+	}
+	return "", "", fmt.Errorf("no supported PowerShell executable found; install pwsh or Windows PowerShell")
 }
 
 func getJfrogBin() string {
@@ -416,7 +423,19 @@ func parseBoolOrDefault(defaultValue bool, s string) (result bool) {
 // trace writes each command to stdout with the command wrapped in an xml
 // tag so that it can be extracted and displayed in the logs.
 func trace(cmd *exec.Cmd) {
-	fmt.Fprintf(os.Stdout, "+ %s\n", strings.Join(cmd.Args, " "))
+	fmt.Fprintf(os.Stdout, "+ %s\n", redactCommand(strings.Join(cmd.Args, " ")))
+}
+
+func redactCommand(command string) string {
+	for _, pattern := range []*regexp.Regexp{
+		regexp.MustCompile(`(?i)(--password(?:=|\s+))\S+`),
+		regexp.MustCompile(`(?i)(-Ppassword=)\S+`),
+		regexp.MustCompile(`(?i)(--access-token(?:=|\s+))\S+`),
+		regexp.MustCompile(`(?i)(--apikey(?:=|\s+))\S+`),
+	} {
+		command = pattern.ReplaceAllString(command, `${1}***`)
+	}
+	return command
 }
 
 func setSecureConnectProxies() {

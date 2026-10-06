@@ -22,16 +22,16 @@ manifests:
     platform:
       architecture: amd64
       os: windows
-      version: 1809
+      version: "10.0.17763.9245"
   -
     image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}windows-ltsc2022-amd64
     platform:
       architecture: amd64
       os: windows
-      version: ltsc2022
+      version: "10.0.20348.5622"
   -
     image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}windows-ltsc2025-amd64
     platform:
       architecture: amd64
       os: windows
-      version: ltsc2025
+      version: "10.0.26100.33438"

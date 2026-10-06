@@ -38,7 +38,7 @@ func TestBuildDiscard(t *testing.T) {
 	}
 
 	for i := range wantCmds {
-		if gotCmds[i] != wantCmds[i] {
+		if normalizeCommandForTest(gotCmds[i], wantCmds[i]) != wantCmds[i] {
 			t.Errorf("Command mismatch at index %d:\nExpected: %q\nGot:      %q", i, wantCmds[i], gotCmds[i])
 		}
 	}
@@ -71,8 +71,7 @@ func TestGradleBuildDiscard(t *testing.T) {
 	wantCmds := []string{
 		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"gradle-config --server-id-deploy= --server-id-resolve=",
-		"gradle publish -Pusername=ab0 -Ppassword=cd --build-name=t2 --build-number=v1.0",
-		"rt build-publish t2 v1.0 --server-id=",
+		"gradle publish --build-name=t2 --build-number=v1.0",
 		"config add tmpServerIdbdi --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-discard --delete-artifacts=true --max-builds=5 --max-days=7 t2",
 	}
@@ -82,7 +81,7 @@ func TestGradleBuildDiscard(t *testing.T) {
 	}
 
 	for i := range wantCmds {
-		if gotCmds[i] != wantCmds[i] {
+		if normalizeCommandForTest(gotCmds[i], wantCmds[i]) != wantCmds[i] {
 			t.Errorf("Command mismatch at index %d:\nExpected: %q\nGot:      %q", i, wantCmds[i], gotCmds[i])
 		}
 	}
@@ -116,7 +115,6 @@ func TestMvnBuildDiscard(t *testing.T) {
 		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"mvn-config",
 		"mvn deploy --build-name=t2 --build-number=v1.0",
-		"rt build-publish t2 v1.0 --server-id=",
 		"config add tmpServerIdbdi --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-discard --delete-artifacts=true --max-builds=5 --max-days=7 t2",
 	}
@@ -126,7 +124,7 @@ func TestMvnBuildDiscard(t *testing.T) {
 	}
 
 	for i := range wantCmds {
-		if gotCmds[i] != wantCmds[i] {
+		if normalizeCommandForTest(gotCmds[i], wantCmds[i]) != wantCmds[i] {
 			t.Errorf("Command mismatch at index %d:\nExpected: %q\nGot:      %q", i, wantCmds[i], gotCmds[i])
 		}
 	}

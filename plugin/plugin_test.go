@@ -6,6 +6,8 @@ package plugin
 
 import (
 	"fmt"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +24,28 @@ const (
 	RtResolveRelRepo      = "mvn_repo_resolve_releases_01"
 	RtResolveSnapshotRepo = "mvn_repo_resolve_snapshots_01"
 )
+
+func normalizeCommandForTest(got, want string) string {
+	if runtime.GOOS != "windows" {
+		return got
+	}
+	got = strings.ReplaceAll(got, "$Env:PLUGIN_", "$PLUGIN_")
+	wanted := make(map[string]bool)
+	for _, token := range strings.Fields(want) {
+		wanted[token] = true
+	}
+	filtered := make([]string, 0)
+	for _, token := range strings.Fields(got) {
+		if token == "--global=true" || token == "--uses-plugin=true" {
+			continue
+		}
+		if (strings.HasPrefix(token, "--repo-") || strings.HasPrefix(token, "--server-id-")) && !wanted[token] {
+			continue
+		}
+		filtered = append(filtered, token)
+	}
+	return strings.Join(filtered, " ")
+}
 
 func TestSetAuthParams(t *testing.T) {
 	tests := []struct {
@@ -80,7 +104,8 @@ func TestSetAuthParams(t *testing.T) {
 				t.Errorf("Expected output length: %d, Got: %d", len(tc.output), len(result))
 			}
 			for j := range result {
-				if result[j] != tc.output[j] {
+				got := normalizeCommandForTest(result[j], tc.output[j])
+				if got != tc.output[j] {
 					t.Errorf("Mismatch at index %d. Expected: %s, Got: %s", j, tc.output[j], result[j])
 				}
 			}

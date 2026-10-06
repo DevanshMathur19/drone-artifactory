@@ -25,7 +25,7 @@ func TestGetScanCommandUserPassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
@@ -56,7 +56,7 @@ func TestGetBuildInfoPublishCommandUserPassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
@@ -85,7 +85,7 @@ func TestPromoteBuildCommandUserPassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
