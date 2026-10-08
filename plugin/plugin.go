@@ -5,10 +5,8 @@
 package plugin
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -101,6 +99,9 @@ type Args struct {
 	MaxBuilds       string `envconfig:"PLUGIN_MAX_BUILDS"`
 	MaxDays         string `envconfig:"PLUGIN_MAX_DAYS"`
 
+	// Working directory for build-tool commands.
+	ProjectDir string `envconfig:"PLUGIN_PROJECT_DIR"`
+
 	// OIDC authentication
 	OidcToken        string `envconfig:"ARTIFACTORY_OIDC_TOKEN"`
 	OidcProviderName string `envconfig:"ARTIFACTORY_OIDC_PROVIDER_NAME"`
@@ -128,7 +129,6 @@ func Exec(ctx context.Context, args Args) error {
 			return fmt.Errorf("OIDC token exchange failed: %w", err)
 		}
 		args.AccessToken = accessToken
-		os.Setenv("PLUGIN_ACCESS_TOKEN", accessToken)
 	}
 
 	logrus.Println("Checking RT commands")
@@ -141,16 +141,21 @@ func Exec(ctx context.Context, args Args) error {
 	if args.URL == "" {
 		return fmt.Errorf("JFrog Artifactory URL must be set, or anonymous access is not permitted")
 	}
+	artifactoryURL, err := normalizeArtifactoryURL(args.URL)
+	if err != nil {
+		return err
+	}
+	args.URL = artifactoryURL
 
-	cmdArgs := []string{getJfrogBin(), "rt", "u", fmt.Sprintf("--url %s", args.URL), "--detailed-summary=true"}
+	cmdArgs := []string{getJfrogBin(), "rt", "u", "--url=" + args.URL, "--detailed-summary=true"}
 	if args.Retries != 0 {
 		cmdArgs = append(cmdArgs, fmt.Sprintf("--retries=%d", args.Retries))
 	}
 
 	// Set authentication params
-	cmdArgs, error := setAuthParams(cmdArgs, args)
-	if error != nil {
-		return error
+	cmdArgs, err = setAuthParams(cmdArgs, args)
+	if err != nil {
+		return err
 	}
 
 	flat := parseBoolOrDefault(false, args.Flat)
@@ -170,7 +175,7 @@ func Exec(ctx context.Context, args Args) error {
 		cmdArgs = append(cmdArgs, fmt.Sprintf("--build-number=%s", args.BuildNumber))
 	}
 	if args.BuildName != "" {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--build-name='%s'", args.BuildName))
+		cmdArgs = append(cmdArgs, "--build-name="+args.BuildName)
 	}
 
 	if err := WriteKnownGoodServerCertsForTls(args); err != nil {
@@ -178,14 +183,14 @@ func Exec(ctx context.Context, args Args) error {
 	}
 	// Take in spec file or use source/target arguments
 	if args.Spec != "" {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--spec=%s", args.Spec))
+		cmdArgs = append(cmdArgs, "--spec="+args.Spec)
 		if args.SpecVars != "" {
-			cmdArgs = append(cmdArgs, fmt.Sprintf("--spec-vars='%s'", args.SpecVars))
+			cmdArgs = append(cmdArgs, "--spec-vars="+args.SpecVars)
 		}
 	} else {
 		filteredTargetProps := filterTargetProps(args.TargetProps)
 		if filteredTargetProps != "" {
-			cmdArgs = append(cmdArgs, fmt.Sprintf("--target-props='%s'", filteredTargetProps))
+			cmdArgs = append(cmdArgs, "--target-props="+filteredTargetProps)
 		}
 		if args.Source == "" {
 			return fmt.Errorf("source file needs to be set")
@@ -193,37 +198,17 @@ func Exec(ctx context.Context, args Args) error {
 		if args.Target == "" {
 			return fmt.Errorf("target path needs to be set")
 		}
-		cmdArgs = append(cmdArgs, fmt.Sprintf("\"%s\"", args.Source), args.Target)
+		cmdArgs = append(cmdArgs, args.Source, args.Target)
 	}
 
-	cmdStr := strings.Join(cmdArgs[:], " ")
-
-	shell, shArg, err := getShell()
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.CommandContext(ctx, shell, shArg, cmdStr)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
-
-	// Only stdout is teed into summaryBuf: the --detailed-summary JSON is
-	// written to stdout, and exec.Cmd only serializes writes to Stdout/Stderr
-	// when they're the *same* writer value, so sharing summaryBuf between two
-	// distinct MultiWriters would race between the stdout/stderr copy goroutines.
-	var summaryBuf bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &summaryBuf)
-	cmd.Stderr = os.Stderr
-	trace(cmd)
-
-	err = cmd.Run()
+	summary, err := runCommand(ctx, args, cmdArgs, true)
 	if err != nil {
 		return err
 	}
 
 	// Prefer the authoritative list from JFrog CLI's --detailed-summary output;
 	// fall back to local glob resolution if parsing fails.
-	entries := parseJFrogDetailedSummary(summaryBuf.Bytes(), args.URL)
+	entries := parseJFrogDetailedSummary(summary, args.URL)
 	if len(entries) == 0 {
 		entries = collectArtifactEntries(args)
 	}
@@ -246,7 +231,7 @@ func publishBuildInfo(ctx context.Context, args Args) error {
 		return fmt.Errorf("both build name and build number need to be set when publishing build info")
 	}
 
-	sanitizedURL, err := sanitizeURL(args.URL)
+	sanitizedURL, err := normalizeArtifactoryURL(args.URL)
 	if err != nil {
 		return err
 	}
@@ -255,34 +240,18 @@ func publishBuildInfo(ctx context.Context, args Args) error {
 		getJfrogBin(),
 		"rt",
 		"build-publish",
-		"\"" + args.BuildName + "\"",
-		"\"" + args.BuildNumber + "\"",
-		fmt.Sprintf("--url=%s", sanitizedURL),
+		args.BuildName,
+		args.BuildNumber,
+		"--url=" + sanitizedURL,
 	}
 
-	if args.AccessToken != "" {
-		publishCmdArgs = append(publishCmdArgs, fmt.Sprintf("--access-token=%sPLUGIN_ACCESS_TOKEN", getEnvPrefix()))
-	} else if args.Username != "" && args.Password != "" {
-		publishCmdArgs = append(publishCmdArgs, fmt.Sprintf("--user=%sPLUGIN_USERNAME", getEnvPrefix()))
-		publishCmdArgs = append(publishCmdArgs, fmt.Sprintf("--password=%sPLUGIN_PASSWORD", getEnvPrefix()))
-	} else {
-		return fmt.Errorf("either access token or username/password need to be set for publishing build info")
-	}
-
-	publishCmdStr := strings.Join(publishCmdArgs, " ")
-	shell, shArg, err := getShell()
+	publishCmdArgs, err = setAuthParams(publishCmdArgs, args)
 	if err != nil {
 		return err
 	}
-	publishCmd := exec.CommandContext(ctx, shell, shArg, publishCmdStr)
-	publishCmd.Env = os.Environ()
-	publishCmd.Env = append(publishCmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
-	publishCmd.Stdout = os.Stdout
-	publishCmd.Stderr = os.Stderr
-	trace(publishCmd)
 
-	if err := publishCmd.Run(); err != nil {
-		return fmt.Errorf("error publishing build info: %s", err)
+	if err := ExecCommand(ctx, args, publishCmdArgs); err != nil {
+		return fmt.Errorf("error publishing build info: %w", err)
 	}
 
 	return nil
@@ -314,37 +283,59 @@ func filterTargetProps(rawProps string) string {
 	return strings.Join(validPairs, ",")
 }
 
-// sanitizeURL trims the URL to include only up to the '/artifactory/' path.
-func sanitizeURL(inputURL string) (string, error) {
+func parseJFrogURL(inputURL string) (*url.URL, string, error) {
 	parsedURL, err := url.Parse(inputURL)
 	if err != nil {
-		return "", fmt.Errorf("invalid URL: %s", inputURL)
+		return nil, "", fmt.Errorf("invalid URL: %s", inputURL)
 	}
-	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return "", fmt.Errorf("invalid URL: %s", inputURL)
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" || parsedURL.Host == "" {
+		return nil, "", fmt.Errorf("invalid URL: %s", inputURL)
 	}
-	parts := strings.Split(parsedURL.Path, "/artifactory")
-	if len(parts) < 2 {
-		return "", fmt.Errorf("url does not contain '/artifactory': %s", inputURL)
+	if parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+		return nil, "", fmt.Errorf("invalid Artifactory URL with query or fragment: %s", inputURL)
 	}
+	path := strings.TrimRight(parsedURL.Path, "/")
+	lowerPath := strings.ToLower(path)
+	index := strings.Index(lowerPath, "/artifactory")
+	if index >= 0 {
+		path = path[:index]
+	}
+	parsedURL.Path = path
+	parsedURL.RawPath = ""
+	return parsedURL, path, nil
+}
 
-	// Always set the path to the first part + "/artifactory/"
-	parsedURL.Path = parts[0] + "/artifactory/"
+func normalizePlatformURL(inputURL string) (string, error) {
+	parsedURL, _, err := parseJFrogURL(inputURL)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(parsedURL.String(), "/"), nil
+}
 
-	return parsedURL.String(), nil
+func normalizeArtifactoryURL(inputURL string) (string, error) {
+	platformURL, err := normalizePlatformURL(inputURL)
+	if err != nil {
+		return "", err
+	}
+	return platformURL + "/artifactory/", nil
+}
+
+// sanitizeURL is retained for compatibility with callers and tests.
+func sanitizeURL(inputURL string) (string, error) {
+	return normalizeArtifactoryURL(inputURL)
 }
 
 // setAuthParams appends authentication parameters to cmdArgs based on the provided credentials.
 func setAuthParams(cmdArgs []string, args Args) ([]string, error) {
 	// Set authentication params
-	envPrefix := getEnvPrefix()
 	if args.Username != "" && args.Password != "" {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--user %sPLUGIN_USERNAME", envPrefix))
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--password %sPLUGIN_PASSWORD", envPrefix))
+		cmdArgs = append(cmdArgs, "--user", "$PLUGIN_USERNAME")
+		cmdArgs = append(cmdArgs, "--password", "$PLUGIN_PASSWORD")
 	} else if args.APIKey != "" {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--apikey %sPLUGIN_API_KEY", envPrefix))
+		cmdArgs = append(cmdArgs, "--apikey", "$PLUGIN_API_KEY")
 	} else if args.AccessToken != "" {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--access-token %sPLUGIN_ACCESS_TOKEN", envPrefix))
+		cmdArgs = append(cmdArgs, "--access-token", "$PLUGIN_ACCESS_TOKEN")
 	} else {
 		return nil, fmt.Errorf("either username/password, api key or access token needs to be set")
 	}

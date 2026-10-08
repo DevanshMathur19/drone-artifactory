@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/sirupsen/logrus"
@@ -71,13 +72,20 @@ func GetMavenBuildCommandArgs(args Args) ([][]string, error) {
 		return cmdList, err
 	}
 
-	mvnRunCommandArgs := []string{MvnCmd, args.MvnGoals}
+	goals, err := splitCommandArguments(args.MvnGoals)
+	if err != nil {
+		return cmdList, err
+	}
+	if len(goals) == 0 {
+		return cmdList, fmt.Errorf("Maven goals need to be set")
+	}
+	mvnRunCommandArgs := append([]string{MvnCmd}, goals...)
 	err = PopulateArgs(&mvnRunCommandArgs, &args, MavenRunCmdJsonTagToExeFlagMapStringItemList)
 	if err != nil {
 		return cmdList, err
 	}
 	if len(args.MvnPomFile) > 0 {
-		mvnRunCommandArgs = append(mvnRunCommandArgs, "-f "+args.MvnPomFile)
+		mvnRunCommandArgs = append(mvnRunCommandArgs, "-f", args.MvnPomFile)
 	}
 
 	cmdList = append(cmdList, jfrogConfigAddConfigCommandArgs)
@@ -112,6 +120,9 @@ func GetMavenPublishCommand(args Args) ([][]string, error) {
 
 	rtPublishCommandArgs := []string{MvnCmd, Deploy,
 		"--build-name=" + args.BuildName, "--build-number=" + args.BuildNumber}
+	if args.MvnPomFile != "" {
+		rtPublishCommandArgs = append(rtPublishCommandArgs, "-f", args.MvnPomFile)
+	}
 	err = PopulateArgs(&rtPublishCommandArgs, &args, RtBuildInfoPublishCmdJsonTagToExeFlagMap)
 	if err != nil {
 		logrus.Println("rtPublishCommandArgs PopulateArgs error: ", err)

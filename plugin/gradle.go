@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/sirupsen/logrus"
@@ -66,14 +67,21 @@ func GetGradleCommandArgs(args Args) ([][]string, error) {
 		return cmdList, err
 	}
 
-	gradleTaskCommandArgs := []string{GradleCmd, args.GradleTasks}
+	tasks, err := splitCommandArguments(args.GradleTasks)
+	if err != nil {
+		return cmdList, err
+	}
+	if len(tasks) == 0 {
+		return cmdList, fmt.Errorf("Gradle tasks need to be set")
+	}
+	gradleTaskCommandArgs := append([]string{GradleCmd}, tasks...)
 	err = PopulateArgs(&gradleTaskCommandArgs, &args, GradleRunJsonTagToExeFlagMapStringItemList)
 	if err != nil {
 		return cmdList, err
 	}
 
 	if len(args.BuildFile) > 0 {
-		gradleTaskCommandArgs = append(gradleTaskCommandArgs, "-b "+args.BuildFile)
+		gradleTaskCommandArgs = append(gradleTaskCommandArgs, "-b", args.BuildFile)
 	}
 
 	cmdList = append(cmdList, jfrogConfigAddConfigCommandArgs)

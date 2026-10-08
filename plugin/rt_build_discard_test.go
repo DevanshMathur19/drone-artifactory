@@ -29,7 +29,7 @@ func TestBuildDiscard(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerIdbdi --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerIdbdi --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-discard --delete-artifacts=true --max-builds=5 --max-days=7 t2",
 	}
 
@@ -69,10 +69,10 @@ func TestGradleBuildDiscard(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"gradle-config --server-id-deploy= --server-id-resolve=",
 		"gradle publish --build-name=t2 --build-number=v1.0",
-		"config add tmpServerIdbdi --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerIdbdi --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-discard --delete-artifacts=true --max-builds=5 --max-days=7 t2",
 	}
 
@@ -112,10 +112,10 @@ func TestMvnBuildDiscard(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"mvn-config",
 		"mvn deploy --build-name=t2 --build-number=v1.0",
-		"config add tmpServerIdbdi --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerIdbdi --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-discard --delete-artifacts=true --max-builds=5 --max-days=7 t2",
 	}
 

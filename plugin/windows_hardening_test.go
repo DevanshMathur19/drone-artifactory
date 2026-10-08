@@ -2,14 +2,60 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestArgvHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_ARTIFACTORY_ARGV_HELPER") != "1" {
+		return
+	}
+	if delay := os.Getenv("ARTIFACTORY_ARGV_HELPER_DELAY"); delay != "" {
+		duration, err := time.ParseDuration(delay)
+		if err != nil {
+			os.Exit(2)
+		}
+		time.Sleep(duration)
+	}
+	separator := -1
+	for index, argument := range os.Args {
+		if argument == "--" {
+			separator = index
+			break
+		}
+	}
+	if separator < 0 {
+		os.Exit(3)
+	}
+	if cwdOutput := os.Getenv("ARTIFACTORY_ARGV_HELPER_CWD_OUTPUT"); cwdOutput != "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			os.Exit(6)
+		}
+		if err := os.WriteFile(cwdOutput, []byte(cwd), 0600); err != nil {
+			os.Exit(7)
+		}
+	}
+	payload, err := json.Marshal(os.Args[separator+1:])
+	if err != nil {
+		os.Exit(4)
+	}
+	if err := os.WriteFile(os.Getenv("ARTIFACTORY_ARGV_HELPER_OUTPUT"), payload, 0600); err != nil {
+		os.Exit(5)
+	}
+	if message := os.Getenv("ARTIFACTORY_ARGV_HELPER_ERROR"); message != "" {
+		_, _ = os.Stderr.WriteString(message)
+		os.Exit(8)
+	}
+	os.Exit(0)
+}
 
 func TestResolveShellPrefersPwshFromPath(t *testing.T) {
 	lookPath := func(name string) (string, error) {
@@ -63,11 +109,43 @@ func TestUnknownBuildToolCommandFailsClosed(t *testing.T) {
 		{BuildTool: "ant", Command: "build"},
 		{BuildTool: MvnCmd, Command: "delete-everything"},
 		{Command: "unknown"},
-		{BuildTool: GradleCmd, Command: "download"},
 	} {
 		if commands, err := GetRtCommandsList(args); err == nil || len(commands) != 0 {
 			t.Fatalf("expected unsupported combination to fail: %#v, commands=%v err=%v", args, commands, err)
 		}
+	}
+}
+
+func TestStandaloneCommandsIgnoreStaleBuildTool(t *testing.T) {
+	for _, command := range []string{
+		"download",
+		"cleanup",
+		"scan",
+		"publish-build-info",
+		"promote",
+		"add-build-dependencies",
+		"build-discard",
+	} {
+		t.Run(command, func(t *testing.T) {
+			args := Args{
+				BuildTool:   GradleCmd,
+				Command:     command,
+				Username:    "user",
+				Password:    "password",
+				URL:         RtUrlTestStr,
+				BuildName:   RtBuildName,
+				BuildNumber: RtBuildNumber,
+				Source:      "generic-local/source.zip",
+				Target:      "generic-local/target/",
+			}
+			commands, err := GetRtCommandsList(args)
+			if err != nil {
+				t.Fatalf("standalone command rejected a stale build_tool: %v", err)
+			}
+			if len(commands) == 0 {
+				t.Fatal("standalone command generated no commands")
+			}
+		})
 	}
 }
 
@@ -137,6 +215,118 @@ func TestDownloadPreservesSourceTargetOrderAndWindowsPaths(t *testing.T) {
 	}
 	if sourceIndex < 0 || targetIndex != sourceIndex+1 {
 		t.Fatalf("source and target order is wrong: %#v", command)
+	}
+}
+
+func TestExecCommandPreservesArgumentsWithoutShellReparsing(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "argv.json")
+	t.Setenv("GO_WANT_ARTIFACTORY_ARGV_HELPER", "1")
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_OUTPUT", output)
+
+	expected := []string{
+		"rt",
+		"download",
+		`generic-local/releases/**/*.zip`,
+		`C:\workspace\files with spaces\`,
+		`quoted"value`,
+		`ampersand&value`,
+		`semicolon;value`,
+		`parentheses(value)`,
+	}
+	command := []string{executable, "-test.run=TestArgvHelperProcess", "--"}
+	command = append(command, expected...)
+	if err := ExecCommand(context.Background(), Args{}, command); err != nil {
+		t.Fatalf("ExecCommand returned an error: %v", err)
+	}
+
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual []string
+	if err := json.Unmarshal(data, &actual); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("argv changed during execution:\nwant: %#v\n got: %#v", expected, actual)
+	}
+}
+
+func TestExecCommandUsesValidatedProjectDirectory(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectDir, err := os.MkdirTemp(workspace, "project with spaces-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(projectDir)
+
+	argvOutput := filepath.Join(t.TempDir(), "argv.json")
+	cwdOutput := filepath.Join(t.TempDir(), "cwd.txt")
+	t.Setenv("GO_WANT_ARTIFACTORY_ARGV_HELPER", "1")
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_OUTPUT", argvOutput)
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_CWD_OUTPUT", cwdOutput)
+
+	relativeProjectDir, err := filepath.Rel(workspace, projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := []string{executable, "-test.run=TestArgvHelperProcess", "--", "mvn", "-f", "pom with spaces.xml"}
+	if err := ExecCommand(context.Background(), Args{ProjectDir: relativeProjectDir}, command); err != nil {
+		t.Fatalf("ExecCommand returned an error: %v", err)
+	}
+	actualCWD, err := os.ReadFile(cwdOutput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Clean(string(actualCWD)) != filepath.Clean(projectDir) {
+		t.Fatalf("command ran in %q, want %q", actualCWD, projectDir)
+	}
+}
+
+func TestProjectDirectoryRejectsWorkspaceEscape(t *testing.T) {
+	_, err := resolveProjectDir(filepath.Join("..", "outside"))
+	if err == nil || !strings.Contains(err.Error(), "outside the workspace") {
+		t.Fatalf("expected workspace escape error, got %v", err)
+	}
+}
+
+func TestCommandFailureIsActionableAndRedacted(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GO_WANT_ARTIFACTORY_ARGV_HELPER", "1")
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_OUTPUT", filepath.Join(t.TempDir(), "argv.json"))
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_ERROR", "build-info rejected secret-value")
+	command := []string{
+		executable,
+		"-test.run=TestArgvHelperProcess",
+		"--",
+		"rt",
+		"build-publish",
+		"--password",
+		"$PLUGIN_PASSWORD",
+	}
+	err = ExecCommand(context.Background(), Args{Password: "secret-value"}, command)
+	if err == nil {
+		t.Fatal("expected command failure")
+	}
+	if !strings.Contains(err.Error(), "build-info rejected ***") {
+		t.Fatalf("failure did not preserve redacted diagnostics: %v", err)
+	}
+	if strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("failure exposed the password: %v", err)
 	}
 }
 
@@ -228,10 +418,17 @@ func TestCommandTraceRedactsKnownCredentialFlags(t *testing.T) {
 }
 
 func TestExecCommandHonorsCancellation(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GO_WANT_ARTIFACTORY_ARGV_HELPER", "1")
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_OUTPUT", filepath.Join(t.TempDir(), "argv.json"))
+	t.Setenv("ARTIFACTORY_ARGV_HELPER_DELAY", "5s")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	err := ExecCommand(ctx, Args{}, []string{"sleep", "5"})
+	err = ExecCommand(ctx, Args{}, []string{executable, "-test.run=TestArgvHelperProcess", "--"})
 	if err == nil {
 		t.Fatal("expected cancelled command to fail")
 	}

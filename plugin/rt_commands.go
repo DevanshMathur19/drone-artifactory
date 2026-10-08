@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -26,6 +25,11 @@ const (
 )
 
 func HandleRtCommands(ctx context.Context, args Args) error {
+	artifactoryURL, err := normalizeArtifactoryURL(args.URL)
+	if err != nil {
+		return err
+	}
+	args.URL = artifactoryURL
 
 	commandsList, err := GetRtCommandsList(args)
 	if err != nil {
@@ -40,9 +44,10 @@ func HandleRtCommands(ctx context.Context, args Args) error {
 		return err
 	}
 
-	for _, cmd := range commandsList {
+	for index, cmd := range commandsList {
 		execArgs := []string{getJfrogBin()}
 		execArgs = append(execArgs, cmd...)
+		logrus.Printf("Running Artifactory command %d/%d: %s", index+1, len(commandsList), commandLabel(execArgs))
 		err := ExecCommand(ctx, args, execArgs)
 		if err != nil {
 			logrus.Println("Error Unable to run err = ", err)
@@ -119,45 +124,37 @@ func GetRtCommandsList(args Args) ([][]string, error) {
 		commandsList [][]string
 		err          error
 	)
-	switch {
-	case args.BuildTool == MvnCmd && (args.Command == "" || args.Command == "build"):
-		logrus.Println("mvn build start")
-		commandsList, err = GetMavenBuildCommandArgs(args)
-	case args.BuildTool == MvnCmd && args.Command == Publish:
-		commandsList, err = GetMavenPublishCommand(args)
-	case args.BuildTool == GradleCmd && (args.Command == "" || args.Command == "build"):
-		logrus.Println("Gradle build start")
-		commandsList, err = GetGradleCommandArgs(args)
-	case args.BuildTool == GradleCmd && args.Command == Publish:
-		logrus.Println("Gradle publish start")
-		commandsList, err = GetGradlePublishCommand(args)
-	case args.BuildTool == "" && args.Command == "download":
+	switch args.Command {
+	case "download":
+		logIgnoredBuildTool(args)
 		logrus.Println("download start")
 		commandsList, err = GetDownloadCommandArgs(args)
-	case args.BuildTool == "" && args.Command == "cleanup":
+	case "cleanup":
+		logIgnoredBuildTool(args)
 		logrus.Println("cleanup start")
 		commandsList, err = GetCleanupCommandArgs(args)
-	case args.BuildTool == "" && args.Command == "scan":
+	case "scan":
+		logIgnoredBuildTool(args)
 		logrus.Println("scan start")
 		commandsList, err = GetScanCommandArgs(args)
-	case args.BuildTool == "" && args.Command == "publish-build-info":
+	case "publish-build-info":
+		logIgnoredBuildTool(args)
 		logrus.Println("publish-build-info start")
 		commandsList, err = GetBuildInfoPublishCommandArgs(args)
-	case args.BuildTool == "" && args.Command == "promote":
+	case "promote":
+		logIgnoredBuildTool(args)
 		logrus.Println("promote start")
 		commandsList, err = GetPromoteCommandArgs(args)
-	case args.BuildTool == "" && args.Command == "add-build-dependencies":
+	case "add-build-dependencies":
+		logIgnoredBuildTool(args)
 		logrus.Println("add-build-dependencies start")
 		commandsList, err = GetAddDependenciesCommandArgs(args)
-	case args.BuildTool == "" && args.Command == "build-discard":
+	case "build-discard":
+		logIgnoredBuildTool(args)
 		logrus.Println("build-discard start")
 		commandsList, err = GetBuildDiscardCommandArgs(args)
 	default:
-		return nil, fmt.Errorf(
-			"unsupported build_tool/command combination: %q/%q",
-			args.BuildTool,
-			args.Command,
-		)
+		commandsList, err = getBuildToolCommands(args)
 	}
 	if err != nil {
 		return nil, err
@@ -172,38 +169,40 @@ func GetRtCommandsList(args Args) ([][]string, error) {
 	return commandsList, nil
 }
 
-func GetShellForOs(osName string) (string, string, error) {
-	return resolveShell(osName, exec.LookPath, os.Stat)
+func logIgnoredBuildTool(args Args) {
+	if args.BuildTool != "" {
+		logrus.Warnf(
+			"build_tool %q is ignored for standalone command %q; remove it because this compatibility behavior is deprecated",
+			args.BuildTool,
+			args.Command,
+		)
+	}
 }
 
-func ExecCommand(ctx context.Context, args Args, cmdArgs []string) error {
-
-	cmdStr := strings.Join(cmdArgs[:], " ")
-
-	shell, shArg, err := GetShellForOs(runtime.GOOS)
-	if err != nil {
-		return err
+func getBuildToolCommands(args Args) ([][]string, error) {
+	switch {
+	case args.BuildTool == MvnCmd && (args.Command == "" || args.Command == "build"):
+		logrus.Println("mvn build start")
+		return GetMavenBuildCommandArgs(args)
+	case args.BuildTool == MvnCmd && args.Command == Publish:
+		return GetMavenPublishCommand(args)
+	case args.BuildTool == GradleCmd && (args.Command == "" || args.Command == "build"):
+		logrus.Println("Gradle build start")
+		return GetGradleCommandArgs(args)
+	case args.BuildTool == GradleCmd && args.Command == Publish:
+		logrus.Println("Gradle publish start")
+		return GetGradlePublishCommand(args)
+	default:
+		return nil, fmt.Errorf(
+			"unsupported build_tool/command combination: %q/%q",
+			args.BuildTool,
+			args.Command,
+		)
 	}
+}
 
-	logrus.Println()
-	logrus.Printf("%s %s %s", shell, shArg, cmdStr)
-	logrus.Println()
-
-	cmd := exec.CommandContext(ctx, shell, shArg, cmdStr)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	trace(cmd)
-
-	err = cmd.Run()
-	if err != nil {
-		logrus.Println(" Error: ", err)
-		return err
-	}
-
-	return nil
+func GetShellForOs(osName string) (string, string, error) {
+	return resolveShell(osName, exec.LookPath, os.Stat)
 }
 
 type JsonTagToExeFlagMapStringItem struct {
@@ -328,6 +327,10 @@ func GetConfigAddConfigCommandArgs(srvConfigStr, userName, password, url,
 	if srvConfigStr == "" {
 		srvConfigStr = tmpServerId
 	}
+	platformURL, err := normalizePlatformURL(url)
+	if err != nil {
+		return nil, err
+	}
 
 	authParams, err := setAuthParams([]string{}, Args{Username: userName,
 		Password: password, AccessToken: accessToken, APIKey: apiKey})
@@ -336,7 +339,7 @@ func GetConfigAddConfigCommandArgs(srvConfigStr, userName, password, url,
 		return []string{""}, err
 	}
 
-	cfgCommand := []string{"config", "add", srvConfigStr, "--url=" + url}
+	cfgCommand := []string{"config", "add", srvConfigStr, "--url=" + platformURL}
 	cfgCommand = append(cfgCommand, authParams...)
 	cfgCommand = append(cfgCommand, "--interactive=false")
 	return cfgCommand, nil

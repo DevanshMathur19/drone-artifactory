@@ -26,7 +26,7 @@ func TestGetMavenBuildCommandUserPassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add resolve_gen_maven_01 --url=https://artifactory.test.io/artifactory/ " +
+		"config add resolve_gen_maven_01 --url=https://artifactory.test.io " +
 			"--user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"mvn-config --repo-resolve-releases=mvn_repo_resolve_releases_01 " +
 			"--repo-resolve-snapshots=mvn_repo_resolve_snapshots_01 --server-id-resolve=resolve_gen_maven_01",
@@ -63,7 +63,7 @@ func TestGetMavenBuildCommandAccessToken(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add resolve_gen_maven_01 --url=https://artifactory.test.io/artifactory/ " +
+		"config add resolve_gen_maven_01 --url=https://artifactory.test.io " +
 			"--access-token $PLUGIN_ACCESS_TOKEN --interactive=false",
 		"mvn-config --repo-resolve-releases=mvn_repo_resolve_releases_01 " +
 			"--repo-resolve-snapshots=mvn_repo_resolve_snapshots_01 --server-id-resolve=resolve_gen_maven_01",
@@ -98,7 +98,7 @@ func TestGetMavenPublishCommandUserNamePassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add deploy_gen_maven_01 --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add deploy_gen_maven_01 --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"mvn-config --repo-deploy-releases=mvn_repo_deploy_releases_01 --repo-deploy-snapshots=mvn_repo_deploy_snapshots_01",
 		"mvn deploy --build-name=t2 --build-number=v1.0",
 	}
@@ -131,7 +131,7 @@ func TestGetMavenPublishCommandAccessToken(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add deploy_gen_maven_01 --url=https://artifactory.test.io/artifactory/ --access-token $PLUGIN_ACCESS_TOKEN --interactive=false",
+		"config add deploy_gen_maven_01 --url=https://artifactory.test.io --access-token $PLUGIN_ACCESS_TOKEN --interactive=false",
 		"mvn-config --repo-deploy-releases=mvn_repo_deploy_releases_01 --repo-deploy-snapshots=mvn_repo_deploy_snapshots_01",
 		"mvn deploy --build-name=t2 --build-number=v1.0",
 	}

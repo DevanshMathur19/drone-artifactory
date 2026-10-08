@@ -24,7 +24,7 @@ func TestGetGradleBuildCommandArgs(t *testing.T) {
 				BuildNumber: RtBuildNumber,
 			},
 			output: []string{
-				"config add tmpServerId --url=https://artifactory.test.io/artifactory/ " +
+				"config add tmpServerId --url=https://artifactory.test.io " +
 					"--user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 				"gradle-config --repo-deploy=" + RtTestRelRepo + " --repo-resolve=" + RtResolveRelRepo,
 				"gradle clean build --build-name=" + RtBuildName + " --build-number=" + RtBuildNumber,
@@ -73,7 +73,7 @@ func TestGetGradlePublishCommandArgs(t *testing.T) {
 				DeployerId:  RtDeployerId,
 			},
 			output: []string{
-				"config add " + RtDeployerId + " --url=" + RtUrlTestStr +
+				"config add " + RtDeployerId + " --url=https://artifactory.test.io" +
 					" --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 				"gradle-config --repo-deploy=" + RtTestRelRepo + " --repo-resolve=" +
 					RtResolveRelRepo + " --server-id-deploy=" + RtDeployerId + " --server-id-resolve=" + RtDeployerId,

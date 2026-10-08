@@ -49,7 +49,7 @@ func TestGetBuildInfoPublishCommandUserPassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME " +
+		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME " +
 			"--password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-publish t2 v1.0",
 	}
@@ -109,7 +109,7 @@ func TestAddDependenciesCommandUserPassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-add-dependencies --module=backend_module --project=backend_project --spec=spec.json --server-id=tmpServerId t2 v1.0",
 		"rt build-publish t2 v1.0",
 	}

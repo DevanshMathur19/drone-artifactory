@@ -58,21 +58,21 @@ func TestSetAuthParams(t *testing.T) {
 		{
 			cmdArgs: []string{"executable", "arg1", "arg2"},
 			args:    Args{Username: "john", Password: "password123", APIKey: "", AccessToken: ""},
-			output:  []string{"executable", "arg1", "arg2", "--user $PLUGIN_USERNAME", "--password $PLUGIN_PASSWORD"},
+			output:  []string{"executable", "arg1", "arg2", "--user", "$PLUGIN_USERNAME", "--password", "$PLUGIN_PASSWORD"},
 			err:     nil,
 		},
 		// Test case 2
 		{
 			cmdArgs: []string{"./app", "--flag"},
 			args:    Args{Username: "", Password: "", APIKey: "secretkey", AccessToken: ""},
-			output:  []string{"./app", "--flag", "--apikey $PLUGIN_API_KEY"},
+			output:  []string{"./app", "--flag", "--apikey", "$PLUGIN_API_KEY"},
 			err:     nil,
 		},
 		// Test case 3
 		{
 			cmdArgs: []string{"script.sh", "-option"},
 			args:    Args{Username: "", Password: "", APIKey: "", AccessToken: "token123"},
-			output:  []string{"script.sh", "-option", "--access-token $PLUGIN_ACCESS_TOKEN"},
+			output:  []string{"script.sh", "-option", "--access-token", "$PLUGIN_ACCESS_TOKEN"},
 			err:     nil,
 		},
 		// Test case 4
@@ -86,7 +86,7 @@ func TestSetAuthParams(t *testing.T) {
 		{
 			cmdArgs: []string{"app", "-flag"},
 			args:    Args{Username: "user", Password: "", APIKey: "apikey123", AccessToken: ""},
-			output:  []string{"app", "-flag", "--apikey $PLUGIN_API_KEY"},
+			output:  []string{"app", "-flag", "--apikey", "$PLUGIN_API_KEY"},
 			err:     nil,
 		},
 	}
@@ -102,6 +102,7 @@ func TestSetAuthParams(t *testing.T) {
 		} else {
 			if len(result) != len(tc.output) {
 				t.Errorf("Expected output length: %d, Got: %d", len(tc.output), len(result))
+				continue
 			}
 			for j := range result {
 				got := normalizeCommandForTest(result[j], tc.output[j])
@@ -141,8 +142,18 @@ func TestSanitizeURL(t *testing.T) {
 		},
 		{
 			inputURL: "https://example.com/notartifactory",
-			expected: "",
-			err:      fmt.Errorf("url does not contain '/artifactory': https://example.com/notartifactory"),
+			expected: "https://example.com/notartifactory/artifactory/",
+			err:      nil,
+		},
+		{
+			inputURL: "https://example.com",
+			expected: "https://example.com/artifactory/",
+			err:      nil,
+		},
+		{
+			inputURL: "https://example.com/artifactory/artifactory/repository",
+			expected: "https://example.com/artifactory/",
+			err:      nil,
 		},
 		{
 			inputURL: "invalid-url",
@@ -164,5 +175,29 @@ func TestSanitizeURL(t *testing.T) {
 				t.Errorf("For URL %s, Expected: %s, Got: %s", tc.inputURL, tc.expected, result)
 			}
 		}
+	}
+}
+
+func TestNormalizePlatformURL(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  string
+	}{
+		{"https://example.jfrog.io", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory/", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory/libs-release-local/path", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory/artifactory", "https://example.jfrog.io"},
+	} {
+		t.Run(test.input, func(t *testing.T) {
+			got, err := normalizePlatformURL(test.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("normalizePlatformURL(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
 	}
 }
