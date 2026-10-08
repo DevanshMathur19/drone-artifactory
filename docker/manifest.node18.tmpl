@@ -1,0 +1,20 @@
+image: plugins/artifactory:{{trimPrefix "v" build.tag}}-node18-windows
+manifests:
+  -
+    image: plugins/artifactory:{{trimPrefix "v" build.tag}}-windows-node18-nano-ltsc2019-amd64
+    platform:
+      architecture: amd64
+      os: windows
+      version: "10.0.17763.9245"
+  -
+    image: plugins/artifactory:{{trimPrefix "v" build.tag}}-windows-node18-nano-ltsc2022-amd64
+    platform:
+      architecture: amd64
+      os: windows
+      version: "10.0.20348.5622"
+  -
+    image: plugins/artifactory:{{trimPrefix "v" build.tag}}-windows-node18-nano-ltsc2025-amd64
+    platform:
+      architecture: amd64
+      os: windows
+      version: "10.0.26100.33438"

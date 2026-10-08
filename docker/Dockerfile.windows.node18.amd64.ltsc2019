@@ -1,0 +1,25 @@
+# escape=`
+
+ARG RUNTIME_IMAGE=harness/node-build-nano@sha256:3d1800e2c8771cecb7a58c49df9270fba475386438e481c3ccef1cb82e197e90
+FROM ${RUNTIME_IMAGE}
+USER ContainerAdministrator
+SHELL ["C:\\PowerShell\\pwsh.exe", "-NoLogo", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+RUN New-Item -ItemType Directory -Force C:/bin,C:/temp,C:/uploads,C:/users/ContainerAdministrator/.jfrog/security/certs | Out-Null; `
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe' -OutFile 'C:/bin/jfrog.exe'; `
+    if ((Get-FileHash -Algorithm SHA256 'C:/bin/jfrog.exe').Hash.ToLowerInvariant() -ne 'c3997e333dd1d70defe77783dc5ee7fcb5bd537ecb45e57e8b3fb6e2efa41d6c') { throw 'JFrog CLI SHA-256 mismatch' }; `
+    Copy-Item -LiteralPath C:/bin/jfrog.exe -Destination C:/bin/jf.exe -Force
+COPY release/windows/amd64/plugin C:/bin/drone-artifactory.exe
+
+ENV CI=true `
+    GODEBUG=netdns=go `
+    PATH="C:\\bin;${PATH}"
+
+LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" `
+      org.opencontainers.image.revision="b2e6706dd0475eec3ab373716a6041002c3404d0" `
+      org.opencontainers.image.version="1.10.0-rc.1" `
+      io.harness.node.version="18.20.8" `
+      io.harness.windows.build="17763" `
+      io.harness.release.status="migration-only"
+
+ENTRYPOINT ["C:\\bin\\drone-artifactory.exe"]
