@@ -21,6 +21,8 @@ const (
 	Publish      = "publish"
 	GradleConfig = "gradle-config"
 	GradleCmd    = "gradle"
+	NpmConfig    = "npm-config"
+	NpmCmd       = "npm"
 	tmpServerId  = "tmpServerId"
 )
 
@@ -192,6 +194,9 @@ func getBuildToolCommands(args Args) ([][]string, error) {
 	case args.BuildTool == GradleCmd && args.Command == Publish:
 		logrus.Println("Gradle publish start")
 		return GetGradlePublishCommand(args)
+	case args.BuildTool == NpmCmd:
+		logrus.Println("npm operation start")
+		return GetNpmCommandArgs(args)
 	default:
 		return nil, fmt.Errorf(
 			"unsupported build_tool/command combination: %q/%q",

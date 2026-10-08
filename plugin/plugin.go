@@ -77,6 +77,9 @@ type Args struct {
 	RepoDeploy  string `envconfig:"PLUGIN_REPO_DEPLOY"`
 	RepoResolve string `envconfig:"PLUGIN_REPO_RESOLVE"`
 
+	// npm commands
+	NpmVersion string `envconfig:"PLUGIN_NPM_VERSION"`
+
 	// Upload Download commands
 	SpecPath string `envconfig:"PLUGIN_SPEC_PATH"`
 	Module   string `envconfig:"PLUGIN_MODULE"`
