@@ -1,14 +1,27 @@
 # escape=`
 
+ARG BUILDER_IMAGE=mcr.microsoft.com/windows/servercore@sha256:e10503b9a4f7faafa30aa0f5d0e8e7f7ca30a4496b3b87d61178b4d7c6815fb5
 ARG RUNTIME_IMAGE=harness/node-build-nano@sha256:07b20396029b2fd073b5702dd0afb6a4ccbba0d2a914f0fbffe9d156194a664a
+FROM ${BUILDER_IMAGE} AS builder
+SHELL ["powershell", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+RUN New-Item -ItemType Directory -Force C:/downloads,C:/PowerShell | Out-Null; `
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe' -OutFile 'C:/downloads/jfrog.exe'; `
+    if ((Get-FileHash -Algorithm SHA256 'C:/downloads/jfrog.exe').Hash.ToLowerInvariant() -ne 'c3997e333dd1d70defe77783dc5ee7fcb5bd537ecb45e57e8b3fb6e2efa41d6c') { throw 'JFrog CLI SHA-256 mismatch' }; `
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.4.13/PowerShell-7.4.13-win-x64.zip' -OutFile 'C:/downloads/powershell.zip'; `
+    if ((Get-FileHash -Algorithm SHA256 'C:/downloads/powershell.zip').Hash.ToLowerInvariant() -ne '8fb52d2172d285b230c2857a90ba4dd28ecf6477ba4a91f91b6854a647b33b65') { throw 'PowerShell SHA-256 mismatch' }; `
+    Expand-Archive "C:/downloads/powershell.zip" -DestinationPath "C:/PowerShell"; `
+    Remove-Item "C:/downloads/powershell.zip" -Force
+
 FROM ${RUNTIME_IMAGE}
 USER ContainerAdministrator
+COPY --from=builder C:/PowerShell C:/PowerShell
+COPY --from=builder C:/downloads/jfrog.exe C:/bin/jfrog.exe
+COPY --from=builder C:/downloads/jfrog.exe C:/bin/jf.exe
 SHELL ["C:\\PowerShell\\pwsh.exe", "-NoLogo", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
 RUN New-Item -ItemType Directory -Force C:/bin,C:/temp,C:/uploads,C:/users/ContainerAdministrator/.jfrog/security/certs | Out-Null; `
-    Invoke-WebRequest -UseBasicParsing -Uri 'https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe' -OutFile 'C:/bin/jfrog.exe'; `
-    if ((Get-FileHash -Algorithm SHA256 'C:/bin/jfrog.exe').Hash.ToLowerInvariant() -ne 'c3997e333dd1d70defe77783dc5ee7fcb5bd537ecb45e57e8b3fb6e2efa41d6c') { throw 'JFrog CLI SHA-256 mismatch' }; `
-    Copy-Item -LiteralPath C:/bin/jfrog.exe -Destination C:/bin/jf.exe -Force
+    if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) { throw 'Node is unavailable from the inherited runtime PATH' }
 COPY release/windows/amd64/plugin C:/bin/drone-artifactory.exe
 
 ENV CI=true `
