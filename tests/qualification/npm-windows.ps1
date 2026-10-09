@@ -58,13 +58,21 @@ $curl = @('--fail','--silent','--show-error','--ssl-no-revoke','--cacert',$caPat
 $json = & curl.exe @curl "$base/$pod"
 if ($LASTEXITCODE -ne 0) {
   $listing = (& curl.exe @curl $base | ConvertFrom-Json).items
-  $addresses = @(
-    [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
-      Where-Object AddressFamily -eq ([System.Net.Sockets.AddressFamily]::InterNetwork) |
-      ForEach-Object IPAddressToString
+  $matches = @(
+    $listing | Where-Object {
+      $labels = $_.metadata.labels
+      $executionLabel = if ($null -ne $labels) {
+        $labels.PSObject.Properties['pipelineExecutionID']
+      } else {
+        $null
+      }
+      $null -ne $executionLabel -and
+        [string] $executionLabel.Value -eq $env:HARNESS_EXECUTION_ID
+    }
   )
-  $matches = @($listing | Where-Object { $addresses -contains [string] $_.status.podIP })
-  if ($matches.Count -ne 1) { throw "Could not identify the current Pod in namespace $namespace" }
+  if ($matches.Count -ne 1) {
+    throw "Could not identify the current Pod for execution $($env:HARNESS_EXECUTION_ID) in namespace $namespace"
+  }
   $status = $matches[0].status
 } else {
   $status = ($json | ConvertFrom-Json).status
