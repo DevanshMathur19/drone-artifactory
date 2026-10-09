@@ -29,8 +29,8 @@ ENV CI=true `
     PATH="C:\\bin;${PATH}"
 
 LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" `
-      org.opencontainers.image.revision="e2e052a5592d0017bc9c043786bc52561f67f813" `
-      org.opencontainers.image.version="1.10.0-rc.2" `
+      org.opencontainers.image.revision="402b9f7a274a4c3c609ac4ee59e3c4083871cade" `
+      org.opencontainers.image.version="1.10.0-rc.3" `
       io.harness.node.version="24.20.0" `
       io.harness.windows.build="17763" `
       io.harness.release.status="candidate"
