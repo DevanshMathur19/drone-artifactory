@@ -70,6 +70,53 @@ func TestNpmPublishDefersBuildInfoToExecutor(t *testing.T) {
 	}
 }
 
+func TestNpmBuildInfoPublicationRequiresExplicitSetting(t *testing.T) {
+	if shouldPublishBuildInfo(Args{BuildTool: NpmCmd, Command: Publish}) {
+		t.Fatal("npm publish enabled build-info without publish_build_info")
+	}
+	if !shouldPublishBuildInfo(Args{
+		BuildTool:        NpmCmd,
+		Command:          Publish,
+		PublishBuildInfo: true,
+	}) {
+		t.Fatal("npm publish_build_info setting was ignored")
+	}
+	for _, buildTool := range []string{MvnCmd, GradleCmd} {
+		if !shouldPublishBuildInfo(Args{BuildTool: buildTool, Command: Publish}) {
+			t.Fatalf("%s publish no longer preserves the existing build-info contract", buildTool)
+		}
+	}
+	if shouldPublishBuildInfo(Args{Command: "publish-build-info"}) {
+		t.Fatal("standalone publish-build-info would be published twice")
+	}
+	if shouldPublishBuildInfo(Args{
+		Command:          "add-build-dependencies",
+		PublishBuildInfo: true,
+	}) {
+		t.Fatal("add-build-dependencies would publish build info twice")
+	}
+}
+
+func TestNpmBuildInfoPublicationKeepsJFrogProject(t *testing.T) {
+	command, err := getCentralBuildInfoPublishCommandArgs(Args{
+		URL:         RtUrlTestStr,
+		AccessToken: RtAccessToken,
+		BuildName:   RtBuildName,
+		BuildNumber: RtBuildNumber,
+		Project:     "customer-project",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(command, " ")
+	if !strings.Contains(joined, "--project=customer-project") {
+		t.Fatalf("build-info publication lost the JFrog project: %s", joined)
+	}
+	if strings.Contains(joined, RtAccessToken) {
+		t.Fatalf("build-info command exposed the access token: %s", joined)
+	}
+}
+
 func TestNpmRejectsUnsupportedOperations(t *testing.T) {
 	for _, command := range []string{"", "run arbitrary-script", "delete"} {
 		_, err := GetNpmCommandArgs(Args{
