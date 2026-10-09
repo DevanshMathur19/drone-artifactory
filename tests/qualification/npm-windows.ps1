@@ -90,14 +90,15 @@ $headers = @{Authorization = "Basic $([Convert]::ToBase64String($credentialBytes
 $repo = "$($env:NPM_REPOSITORY_PREFIX)-ltsc$($env:LTSC)"
 $repoUri = "$artifactory/api/repositories/$repo"
 $probe = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri $repoUri
-if ([int]$probe.StatusCode -eq 404) {
+$probeStatus = [int] $probe.StatusCode
+if ($probeStatus -eq 404) {
   $config = @{key=$repo; rclass='local'; packageType='npm'; repoLayoutRef='npm-default'} | ConvertTo-Json -Compress
   $created = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Method Put -Headers $headers -ContentType 'application/json' -Body $config -Uri $repoUri
   if ([int]$created.StatusCode -notin @(200,201)) {
     throw "Could not create npm sandbox repository $repo; HTTP $([int]$created.StatusCode): $($created.Content)"
   }
-} elseif (-not $probe.IsSuccessStatusCode) {
-  throw "Could not inspect npm sandbox repository $repo; HTTP $([int]$probe.StatusCode)"
+} elseif ($probeStatus -lt 200 -or $probeStatus -ge 300) {
+  throw "Could not inspect npm sandbox repository $repo; HTTP $probeStatus"
 }
 
 $project = "fixture node$($env:NODE_MAJOR) ltsc$($env:LTSC)"
@@ -153,7 +154,10 @@ function Invoke-Publisher {
   if ($ExpectSuccess) {
     $encodedName = [uri]::EscapeDataString($buildName)
     $build = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri "$artifactory/api/build/$encodedName/$($env:PIPELINE_SEQUENCE_ID)"
-    if (-not $build.IsSuccessStatusCode) { throw "Build info is absent for $buildName" }
+    $buildStatus = [int] $build.StatusCode
+    if ($buildStatus -lt 200 -or $buildStatus -ge 300) {
+      throw "Build info is absent for $buildName; HTTP $buildStatus"
+    }
   }
 }
 
