@@ -1,14 +1,27 @@
 # escape=`
 
+ARG BUILDER_IMAGE=mcr.microsoft.com/windows/servercore@sha256:e10503b9a4f7faafa30aa0f5d0e8e7f7ca30a4496b3b87d61178b4d7c6815fb5
 ARG RUNTIME_IMAGE=harness/node-build-nano@sha256:51f3376d1aeb46c0213a1ce7781472de73b2b92db231380556884df9944833e8
+FROM ${BUILDER_IMAGE} AS builder
+SHELL ["powershell", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+RUN New-Item -ItemType Directory -Force C:/downloads,C:/PowerShell | Out-Null; `
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe' -OutFile 'C:/downloads/jfrog.exe'; `
+    if ((Get-FileHash -Algorithm SHA256 'C:/downloads/jfrog.exe').Hash.ToLowerInvariant() -ne 'c3997e333dd1d70defe77783dc5ee7fcb5bd537ecb45e57e8b3fb6e2efa41d6c') { throw 'JFrog CLI SHA-256 mismatch' }; `
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/PowerShell/PowerShell/releases/download/v7.4.13/PowerShell-7.4.13-win-x64.zip' -OutFile 'C:/downloads/powershell.zip'; `
+    if ((Get-FileHash -Algorithm SHA256 'C:/downloads/powershell.zip').Hash.ToLowerInvariant() -ne '8fb52d2172d285b230c2857a90ba4dd28ecf6477ba4a91f91b6854a647b33b65') { throw 'PowerShell SHA-256 mismatch' }; `
+    Expand-Archive "C:/downloads/powershell.zip" -DestinationPath "C:/PowerShell"; `
+    Remove-Item "C:/downloads/powershell.zip" -Force
+
 FROM ${RUNTIME_IMAGE}
 USER ContainerAdministrator
+COPY --from=builder C:/PowerShell C:/PowerShell
 SHELL ["C:\\PowerShell\\pwsh.exe", "-NoLogo", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
 RUN New-Item -ItemType Directory -Force C:/bin,C:/temp,C:/uploads,C:/users/ContainerAdministrator/.jfrog/security/certs | Out-Null; `
-    Invoke-WebRequest -UseBasicParsing -Uri 'https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-windows-amd64/jfrog.exe' -OutFile 'C:/bin/jfrog.exe'; `
-    if ((Get-FileHash -Algorithm SHA256 'C:/bin/jfrog.exe').Hash.ToLowerInvariant() -ne 'c3997e333dd1d70defe77783dc5ee7fcb5bd537ecb45e57e8b3fb6e2efa41d6c') { throw 'JFrog CLI SHA-256 mismatch' }; `
-    Copy-Item -LiteralPath C:/bin/jfrog.exe -Destination C:/bin/jf.exe -Force
+    if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) { throw 'Node is unavailable from the inherited runtime PATH' }
+COPY --from=builder C:/downloads/jfrog.exe C:/bin/jfrog.exe
+COPY --from=builder C:/downloads/jfrog.exe C:/bin/jf.exe
 COPY release/windows/amd64/plugin C:/bin/drone-artifactory.exe
 
 ENV CI=true `
@@ -16,8 +29,8 @@ ENV CI=true `
     PATH="C:\\bin;${PATH}"
 
 LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" `
-      org.opencontainers.image.revision="b2e6706dd0475eec3ab373716a6041002c3404d0" `
-      org.opencontainers.image.version="1.10.0-rc.1" `
+      org.opencontainers.image.revision="e2e052a5592d0017bc9c043786bc52561f67f813" `
+      org.opencontainers.image.version="1.10.0-rc.2" `
       io.harness.node.version="24.20.0" `
       io.harness.windows.build="20348" `
       io.harness.release.status="candidate"
