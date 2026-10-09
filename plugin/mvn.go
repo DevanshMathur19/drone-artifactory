@@ -46,9 +46,9 @@ func GetMavenBuildCommandArgs(args Args) ([][]string, error) {
 	if runtime.GOOS == "windows" {
 		// These parameters prevent all interactive prompts
 		mvnConfigCommandArgs = append(mvnConfigCommandArgs, "--global=true")
-		// Add server ID for deployment/resolution
+		// PopulateArgs adds the resolver ID below. Add only the deploy ID here;
+		// adding both would duplicate --server-id-resolve on Windows.
 		if args.ResolverId != "" {
-			mvnConfigCommandArgs = append(mvnConfigCommandArgs, "--server-id-resolve="+args.ResolverId)
 			mvnConfigCommandArgs = append(mvnConfigCommandArgs, "--server-id-deploy="+args.ResolverId)
 		}
 		// Add repos to prevent prompts
