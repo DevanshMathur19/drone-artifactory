@@ -28,8 +28,8 @@ func TestNpmInstallCommand(t *testing.T) {
 	}
 	got := flattenCommands(commands)
 	want := []string{
-		"config add npm-resolver --url=https://artifactory.test.io --access-token $PLUGIN_ACCESS_TOKEN --interactive=false",
-		"config add npm-deployer --url=https://artifactory.test.io --access-token $PLUGIN_ACCESS_TOKEN --interactive=false",
+		"config add npm-resolver --url=https://artifactory.test.io --access-token $PLUGIN_ACCESS_TOKEN --interactive=false --overwrite=true",
+		"config add npm-deployer --url=https://artifactory.test.io --access-token $PLUGIN_ACCESS_TOKEN --interactive=false --overwrite=true",
 		"npm-config --repo-resolve=npm-remote --repo-deploy=npm-local --server-id-resolve=npm-resolver --server-id-deploy=npm-deployer",
 		"npm ci --build-name=t2 --build-number=v1.0 --project=customer-project --module=frontend",
 	}
@@ -39,6 +39,26 @@ func TestNpmInstallCommand(t *testing.T) {
 	for index := range want {
 		if got[index] != want[index] {
 			t.Fatalf("command %d:\nwant %q\n got %q", index, want[index], got[index])
+		}
+	}
+}
+
+func TestNpmConfigIsRetrySafeAndCarriesInsecureTLS(t *testing.T) {
+	commands, err := GetNpmCommandArgs(Args{
+		Command:     "install",
+		URL:         RtUrlTestStr,
+		AccessToken: RtAccessToken,
+		RepoResolve: "npm-remote",
+		RepoDeploy:  "npm-local",
+		Insecure:    "true",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := strings.Join(commands[0], " ")
+	for _, expected := range []string{"--overwrite=true", "--insecure-tls=true"} {
+		if !strings.Contains(config, expected) {
+			t.Fatalf("npm server configuration is missing %s: %s", expected, config)
 		}
 	}
 }
@@ -70,6 +90,53 @@ func TestNpmPublishDefersBuildInfoToExecutor(t *testing.T) {
 	}
 }
 
+func TestNpmBuildInfoPublicationRequiresExplicitSetting(t *testing.T) {
+	if shouldPublishBuildInfo(Args{BuildTool: NpmCmd, Command: Publish}) {
+		t.Fatal("npm publish enabled build-info without publish_build_info")
+	}
+	if !shouldPublishBuildInfo(Args{
+		BuildTool:        NpmCmd,
+		Command:          Publish,
+		PublishBuildInfo: true,
+	}) {
+		t.Fatal("npm publish_build_info setting was ignored")
+	}
+	for _, buildTool := range []string{MvnCmd, GradleCmd} {
+		if !shouldPublishBuildInfo(Args{BuildTool: buildTool, Command: Publish}) {
+			t.Fatalf("%s publish no longer preserves the existing build-info contract", buildTool)
+		}
+	}
+	if shouldPublishBuildInfo(Args{Command: "publish-build-info"}) {
+		t.Fatal("standalone publish-build-info would be published twice")
+	}
+	if shouldPublishBuildInfo(Args{
+		Command:          "add-build-dependencies",
+		PublishBuildInfo: true,
+	}) {
+		t.Fatal("add-build-dependencies would publish build info twice")
+	}
+}
+
+func TestNpmBuildInfoPublicationKeepsJFrogProject(t *testing.T) {
+	command, err := getCentralBuildInfoPublishCommandArgs(Args{
+		URL:         RtUrlTestStr,
+		AccessToken: RtAccessToken,
+		BuildName:   RtBuildName,
+		BuildNumber: RtBuildNumber,
+		Project:     "customer-project",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(command, " ")
+	if !strings.Contains(joined, "--project=customer-project") {
+		t.Fatalf("build-info publication lost the JFrog project: %s", joined)
+	}
+	if strings.Contains(joined, RtAccessToken) {
+		t.Fatalf("build-info command exposed the access token: %s", joined)
+	}
+}
+
 func TestNpmRejectsUnsupportedOperations(t *testing.T) {
 	for _, command := range []string{"", "run arbitrary-script", "delete"} {
 		_, err := GetNpmCommandArgs(Args{
@@ -79,6 +146,23 @@ func TestNpmRejectsUnsupportedOperations(t *testing.T) {
 		})
 		if err == nil {
 			t.Fatalf("unsupported npm command %q was accepted", command)
+		}
+	}
+}
+
+func TestNpmRequiresCompleteBuildCoordinates(t *testing.T) {
+	for _, args := range []Args{
+		{BuildName: "build-without-number"},
+		{BuildNumber: "number-without-build"},
+	} {
+		args.Command = "ci"
+		args.RepoResolve = "npm-remote"
+		args.RepoDeploy = "npm-local"
+		args.AccessToken = RtAccessToken
+		args.URL = RtUrlTestStr
+		if _, err := GetNpmCommandArgs(args); err == nil ||
+			!strings.Contains(err.Error(), "must be set together") {
+			t.Fatalf("expected incomplete build coordinates to fail, got %v", err)
 		}
 	}
 }
