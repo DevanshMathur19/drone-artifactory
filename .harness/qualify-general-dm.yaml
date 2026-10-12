@@ -17,7 +17,7 @@ pipeline:
     - {name: mavenSnapshotRepo, type: String, value: artifactory-maven-snapshot-dm}
     - {name: genericRepo, type: String, value: artifactory-generic-dm}
     - {name: httpsProxy, type: String, value: <+input>.default("")}
-    - {name: noProxy, type: String, value: <+input>.default("")}
+    - {name: noProxy, type: String, value: <+input>.default("oidctest.jfrog.io,.jfrog.io")}
     - name: qualificationScript
       type: String
       value: |-
