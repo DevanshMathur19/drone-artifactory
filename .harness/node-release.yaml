@@ -1,0 +1,725 @@
+pipeline:
+  name: drone-artifactory-node-release
+  identifier: droneartifactorynoderelease
+  projectIdentifier: Drone_Plugins
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: GitHub_Drone_Plugins_Org
+        repoName: drone-artifactory
+        build: <+input>
+  variables:
+    - name: expectedCommitSha
+      type: String
+      value: <+input>
+  stages:
+    - parallel:
+        - stage:
+            name: npm-linux-amd64
+            identifier: npm_linux_amd64
+            type: CI
+            spec:
+              cloneCodebase: true
+              platform: {os: Linux, arch: Amd64}
+              runtime: {type: Cloud, spec: {}}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: golang:1.25.13-alpine
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          go test ./...
+                          mkdir -p release/linux/amd64
+                          if [ '<+codebase.build.type>' = tag ]; then
+                            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>' -o release/linux/amd64/plugin .
+                          else
+                            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.build=<+pipeline.sequenceId>' -o release/linux/amd64/plugin .
+                          fi
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 18
+                      identifier: publish_npm_node18
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.linux.node18.amd64
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-linux-node18-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 18
+                      identifier: publish_moving_npm_node18
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-linux-node18-amd64]
+                        dockerfile: docker/Dockerfile.linux.node18.amd64
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 22
+                      identifier: publish_npm_node22
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.linux.node22.amd64
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-linux-node22-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 22
+                      identifier: publish_moving_npm_node22
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-linux-node22-amd64]
+                        dockerfile: docker/Dockerfile.linux.node22.amd64
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 24
+                      identifier: publish_npm_node24
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.linux.node24.amd64
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-linux-node24-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 24
+                      identifier: publish_moving_npm_node24
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-linux-node24-amd64]
+                        dockerfile: docker/Dockerfile.linux.node24.amd64
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+        - stage:
+            name: npm-linux-arm64
+            identifier: npm_linux_arm64
+            type: CI
+            spec:
+              cloneCodebase: true
+              platform: {os: Linux, arch: Arm64}
+              runtime: {type: Cloud, spec: {}}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: golang:1.25.13-alpine
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          go test ./...
+                          mkdir -p release/linux/arm64
+                          if [ '<+codebase.build.type>' = tag ]; then
+                            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>' -o release/linux/arm64/plugin .
+                          else
+                            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.build=<+pipeline.sequenceId>' -o release/linux/arm64/plugin .
+                          fi
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 18
+                      identifier: publish_npm_node18
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.linux.node18.arm64
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-linux-node18-arm64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 18
+                      identifier: publish_moving_npm_node18
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-linux-node18-arm64]
+                        dockerfile: docker/Dockerfile.linux.node18.arm64
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 22
+                      identifier: publish_npm_node22
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.linux.node22.arm64
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-linux-node22-arm64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 22
+                      identifier: publish_moving_npm_node22
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-linux-node22-arm64]
+                        dockerfile: docker/Dockerfile.linux.node22.arm64
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 24
+                      identifier: publish_npm_node24
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.linux.node24.arm64
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-linux-node24-arm64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 24
+                      identifier: publish_moving_npm_node24
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-linux-node24-arm64]
+                        dockerfile: docker/Dockerfile.linux.node24.arm64
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+        - stage:
+            name: npm-windows-ltsc2019
+            identifier: npm_windows_ltsc2019
+            type: CI
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: VM
+                spec:
+                  type: Pool
+                  spec: {poolName: windows-2019, os: Windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: golang:1.24-windowsservercore-1809
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          test "$(powershell -NoProfile -Command '(Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\").CurrentBuild')" = 17763
+                          go test ./...
+                          mkdir -p release/windows/amd64
+                          if [ '<+codebase.build.type>' = tag ]; then
+                            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>' -o release/windows/amd64/plugin .
+                          else
+                            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.build=<+pipeline.sequenceId>' -o release/windows/amd64/plugin .
+                          fi
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 18
+                      identifier: publish_npm_node18
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2019
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node18-nano-ltsc2019-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 18
+                      identifier: publish_moving_npm_node18
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node18-nano-ltsc2019-amd64]
+                        dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2019
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 22
+                      identifier: publish_npm_node22
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2019
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node22-nano-ltsc2019-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 22
+                      identifier: publish_moving_npm_node22
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node22-nano-ltsc2019-amd64]
+                        dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2019
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 24
+                      identifier: publish_npm_node24
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2019
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node24-nano-ltsc2019-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 24
+                      identifier: publish_moving_npm_node24
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node24-nano-ltsc2019-amd64]
+                        dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2019
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+            delegateSelectors: [windows-vm]
+        - stage:
+            name: npm-windows-ltsc2022
+            identifier: npm_windows_ltsc2022
+            type: CI
+            spec:
+              cloneCodebase: true
+              platform: {os: Windows, arch: Amd64}
+              runtime: {type: Cloud, spec: {}}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: golang:1.25.12
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          test "$(powershell -NoProfile -Command '(Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\").CurrentBuild')" = 20348
+                          go test ./...
+                          mkdir -p release/windows/amd64
+                          if [ '<+codebase.build.type>' = tag ]; then
+                            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>' -o release/windows/amd64/plugin .
+                          else
+                            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.build=<+pipeline.sequenceId>' -o release/windows/amd64/plugin .
+                          fi
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 18
+                      identifier: publish_npm_node18
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2022
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node18-nano-ltsc2022-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 18
+                      identifier: publish_moving_npm_node18
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node18-nano-ltsc2022-amd64]
+                        dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2022
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 22
+                      identifier: publish_npm_node22
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2022
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node22-nano-ltsc2022-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 22
+                      identifier: publish_moving_npm_node22
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node22-nano-ltsc2022-amd64]
+                        dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2022
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 24
+                      identifier: publish_npm_node24
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2022
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node24-nano-ltsc2022-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 24
+                      identifier: publish_moving_npm_node24
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node24-nano-ltsc2022-amd64]
+                        dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2022
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+        - stage:
+            name: npm-windows-ltsc2025
+            identifier: npm_windows_ltsc2025
+            type: CI
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: VM
+                spec:
+                  type: Pool
+                  spec: {poolName: windows-2025, os: Windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: golang:1.25.12
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          test "$(powershell -NoProfile -Command '(Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\").CurrentBuild')" = 26100
+                          go test ./...
+                          mkdir -p release/windows/amd64
+                          if [ '<+codebase.build.type>' = tag ]; then
+                            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=<+codebase.tag> -X main.build=<+pipeline.sequenceId>' -o release/windows/amd64/plugin .
+                          else
+                            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.build=<+pipeline.sequenceId>' -o release/windows/amd64/plugin .
+                          fi
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 18
+                      identifier: publish_npm_node18
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2025
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node18-nano-ltsc2025-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 18
+                      identifier: publish_moving_npm_node18
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node18-nano-ltsc2025-amd64]
+                        dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2025
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 22
+                      identifier: publish_npm_node22
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2025
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node22-nano-ltsc2025-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 22
+                      identifier: publish_moving_npm_node22
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node22-nano-ltsc2025-amd64]
+                        dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2025
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+                  - step:
+                      type: Plugin
+                      name: Publish npm Node 24
+                      identifier: publish_npm_node24
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        image: plugins/docker:21.3.0
+                        settings:
+                          username: drone
+                          password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                          repo: plugins/artifactory
+                          dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2025
+                          auto_tag: "true"
+                          auto_tag_suffix: npm-windows-node24-nano-ltsc2025-amd64-r1
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "tag"
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish moving npm Node 24
+                      identifier: publish_moving_npm_node24
+                      timeout: 60m
+                      spec:
+                        connectorRef: Plugins_Docker_Hub_Connector
+                        repo: plugins/artifactory
+                        tags: [npm-windows-node24-nano-ltsc2025-amd64]
+                        dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2025
+                        context: .
+                        caching: false
+                      when:
+                        stageStatus: Success
+                        condition: <+codebase.build.type> == "branch"
+            delegateSelectors: [windows-vm]
+    - stage:
+        name: npm-manifests
+        identifier: npm_manifests
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform: {os: Linux, arch: Amd64}
+          runtime: {type: Cloud, spec: {}}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Verify release source
+                  identifier: verify_release_source
+                  spec:
+                    connectorRef: Plugins_Docker_Hub_Connector
+                    image: alpine:3.21
+                    shell: Sh
+                    command: |
+                      set -eu
+                      test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+              - step:
+                  type: Plugin
+                  name: Publish npm Node 18 manifest
+                  identifier: publish_npm_node18_manifest
+                  spec:
+                    connectorRef: Plugins_Docker_Hub_Connector
+                    image: plugins/manifest
+                    settings:
+                      username: drone
+                      password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                      auto_tag: "true"
+                      ignore_missing: "false"
+                      spec: docker/manifest.node18.tmpl
+                  when:
+                    stageStatus: Success
+                    condition: <+codebase.build.type> == "tag" || <+codebase.build.type> == "branch"
+              - step:
+                  type: Plugin
+                  name: Publish npm Node 22 manifest
+                  identifier: publish_npm_node22_manifest
+                  spec:
+                    connectorRef: Plugins_Docker_Hub_Connector
+                    image: plugins/manifest
+                    settings:
+                      username: drone
+                      password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                      auto_tag: "true"
+                      ignore_missing: "false"
+                      spec: docker/manifest.node22.tmpl
+                  when:
+                    stageStatus: Success
+                    condition: <+codebase.build.type> == "tag" || <+codebase.build.type> == "branch"
+              - step:
+                  type: Plugin
+                  name: Publish npm Node 24 manifest
+                  identifier: publish_npm_node24_manifest
+                  spec:
+                    connectorRef: Plugins_Docker_Hub_Connector
+                    image: plugins/manifest
+                    settings:
+                      username: drone
+                      password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
+                      auto_tag: "true"
+                      ignore_missing: "false"
+                      spec: docker/manifest.node24.tmpl
+                  when:
+                    stageStatus: Success
+                    condition: <+codebase.build.type> == "tag" || <+codebase.build.type> == "branch"
+  allowStageExecutions: true

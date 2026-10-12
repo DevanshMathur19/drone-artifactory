@@ -1,0 +1,36 @@
+ARG RUNTIME_IMAGE=node:24.20.0-alpine3.24@sha256:d3724e44ee368606d753e0027eb8d2a94fc1f275e5d9e4620178a12edb655f5f
+FROM ${RUNTIME_IMAGE}
+
+ENV CI=true \
+    GODEBUG=netdns=go \
+    ARTIFACTORY_NPM_ROOT=/opt/npm
+
+RUN apk add --no-cache bash ca-certificates curl \
+    && curl -fsSL 'https://releases.jfrog.io/artifactory/jfrog-cli/v2/2.115.0/jfrog-cli-linux-arm64/jfrog' -o /usr/local/bin/jfrog \
+    && echo '669457e9948dcf4aafe01ce316e8ff24e9e339124a5c9ba0d8782e34ecce2f4d  /usr/local/bin/jfrog' | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/jfrog \
+    && ln -s /usr/local/bin/jfrog /usr/local/bin/jf \
+    && for spec in \
+         '5.6.0:b1f0de3767136c1d7b4b0f10e6eb2fb3397e2fe11e4c9cddcd0030ad1af9eddd' \
+         '6.4.1:a48e0b4471d72936afb598ebde0e07076598ac8647c2e9ebe891db5d6fbf2952' \
+         '6.11.3:9e1dbf6a2642df2cef11e68fdc20e29e4ee04bd7c9459fef914cae4bdc587f18' \
+         '6.14.4:704aae84a42e8e3b1ff431589647088aeda00bfccd99b985949be12fd9b4dc9e' \
+         '6.14.7:510091d3b42b60ab75c9d46cebb769ee5204d58d948a61bf913455437fa768c5' \
+         '6.14.8:fe8e873cb606c06f67f666b4725eb9122c8927f677c8c0baf1477f0ff81f5a2c'; do \
+         version="${spec%%:*}"; checksum="${spec#*:}"; archive="/tmp/npm-${version}.tgz"; \
+         curl -fsSL "https://registry.npmjs.org/npm/-/npm-${version}.tgz" -o "${archive}"; \
+         echo "${checksum}  ${archive}" | sha256sum -c -; \
+         mkdir -p "/opt/npm/${version}"; \
+         tar -xzf "${archive}" --strip-components=1 -C "/opt/npm/${version}"; \
+         rm -f "${archive}"; \
+       done \
+    && node --version \
+    && npm --version \
+    && jfrog --version
+
+COPY release/linux/arm64/plugin /bin/plugin
+
+LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" \
+      io.harness.node.version="24.20.0"
+
+ENTRYPOINT ["/bin/plugin"]

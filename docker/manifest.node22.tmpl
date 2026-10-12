@@ -1,0 +1,31 @@
+image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}npm-node22
+manifests:
+  -
+    image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}npm-linux-node22-amd64-r1
+    platform:
+      architecture: amd64
+      os: linux
+  -
+    image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}npm-linux-node22-arm64-r1
+    platform:
+      architecture: arm64
+      os: linux
+      variant: v8
+  -
+    image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}npm-windows-node22-nano-ltsc2019-amd64-r1
+    platform:
+      architecture: amd64
+      os: windows
+      version: "10.0.17763.9245"
+  -
+    image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}npm-windows-node22-nano-ltsc2022-amd64-r1
+    platform:
+      architecture: amd64
+      os: windows
+      version: "10.0.20348.5622"
+  -
+    image: plugins/artifactory:{{#if build.tag}}{{trimPrefix "v" build.tag}}-{{/if}}npm-windows-node22-nano-ltsc2025-amd64-r1
+    platform:
+      architecture: amd64
+      os: windows
+      version: "10.0.26100.33438"
