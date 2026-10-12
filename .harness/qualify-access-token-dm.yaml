@@ -1,0 +1,584 @@
+pipeline:
+  name: Artifactory Plugin - Access Token Qualification-dm
+  identifier: artifactory_plugin_access_token_qualify_dm
+  projectIdentifier: Drone_Plugins
+  orgIdentifier: default
+  variables:
+    - {name: dockerConnector, type: String, value: dmdockerconn}
+    - {name: namespace, type: String, value: cie-test}
+    - {name: windows2019Candidate, type: String, value: "plugins/artifactory@sha256:4e089631f5adeebadc84641dee02098524584f77bcce323f63e4b1f2f46bf209"}
+    - {name: windows2022Candidate, type: String, value: "plugins/artifactory@sha256:42c96c565cc17e30a275bce89709d5ed555d2aca6c09c5bcd0b55a216a71bffc"}
+    - {name: windows2025Candidate, type: String, value: "plugins/artifactory@sha256:ea970fe1fb3ca195cd7dd25027e8c81fd99d710bc75c86dc1b58226cbdfcc009"}
+    - {name: jfrogUrl, type: String, value: "https://oidctest.jfrog.io"}
+    - {name: jfrogAccessToken, type: Secret, value: chiragoidctestPersonalAccessToken}
+    - {name: mavenReleaseRepo, type: String, value: artifactory-maven-release-dm}
+    - {name: mavenSnapshotRepo, type: String, value: artifactory-maven-snapshot-dm}
+    - {name: genericRepo, type: String, value: artifactory-generic-dm}
+    - name: prepareScript
+      type: String
+      value: |-
+        $ErrorActionPreference = 'Stop'
+        Set-StrictMode -Version Latest
+
+        if ($env:CANDIDATE_IMAGE -notmatch '@(sha256:[0-9a-f]{64})$') {
+          throw 'Candidate must be digest pinned'
+        }
+        $expectedDigest = $Matches[1]
+        $actualBuild = [System.Environment]::OSVersion.Version.Build.ToString()
+        if ($actualBuild -ne $env:EXPECTED_WINDOWS_BUILD) {
+          throw "Expected Windows build $env:EXPECTED_WINDOWS_BUILD; observed $actualBuild"
+        }
+        foreach ($command in @('pwsh', 'jf', 'jfrog', 'java', 'mvn', 'gradle')) {
+          if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
+            throw "Required command is unavailable: $command"
+          }
+        }
+
+        $tokenPath = 'C:\var\run\secrets\kubernetes.io\serviceaccount\token'
+        $caPath = 'C:\var\run\secrets\kubernetes.io\serviceaccount\ca.crt'
+        $token = Get-Content -LiteralPath $tokenPath -Raw
+        $namespace = $env:POD_NAMESPACE
+        $pod = if ($env:POD_NAME) { $env:POD_NAME } else { $env:COMPUTERNAME }
+        $base = "https://$($env:KUBERNETES_SERVICE_HOST):$($env:KUBERNETES_SERVICE_PORT_HTTPS)/api/v1/namespaces/$namespace/pods"
+        $curl = @('--fail', '--silent', '--show-error', '--ssl-no-revoke', '--cacert', $caPath, '-H', "Authorization: Bearer $token")
+        $json = & curl.exe @curl "$base/$pod"
+        if ($LASTEXITCODE -ne 0) {
+          $listing = (& curl.exe @curl $base | ConvertFrom-Json).items
+          $addresses = @(
+            [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
+              Where-Object AddressFamily -eq ([System.Net.Sockets.AddressFamily]::InterNetwork) |
+              ForEach-Object IPAddressToString
+          )
+          $matches = @($listing | Where-Object { $addresses -contains [string] $_.status.podIP })
+          if ($matches.Count -ne 1) { throw "Could not identify the current Pod in namespace $namespace" }
+          $status = $matches[0].status
+        } else {
+          $status = ($json | ConvertFrom-Json).status
+        }
+        $imageIds = @($status.containerStatuses | ForEach-Object { [string] $_.imageID })
+        if (@($imageIds | Where-Object { $_ -match "@$([regex]::Escape($expectedDigest))$" }).Count -lt 1) {
+          throw "Expected running imageID $expectedDigest; observed: $($imageIds -join ', ')"
+        }
+
+        $artifactory = $env:JFROG_URL.TrimEnd('/')
+        if (-not $artifactory.EndsWith('/artifactory', [StringComparison]::OrdinalIgnoreCase)) {
+          $artifactory += '/artifactory'
+        }
+        $headers = @{Authorization = "Bearer $($env:JFROG_ACCESS_TOKEN)"}
+        $repositories = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri "$artifactory/api/repositories"
+        if ([int]$repositories.StatusCode -ne 200) {
+          throw "JFrog access-token preflight failed with HTTP $([int]$repositories.StatusCode): $($repositories.Content)"
+        }
+        $repoKeys = @($repositories.Content | ConvertFrom-Json | ForEach-Object key)
+        foreach ($requiredRepo in @($env:MAVEN_RELEASE_REPO, $env:MAVEN_SNAPSHOT_REPO, $env:GENERIC_REPO)) {
+          if ($repoKeys -notcontains $requiredRepo) { throw "Required repository is absent: $requiredRepo" }
+        }
+
+        if ($env:LTSC -eq '2025') {
+          $javaHosts = @(
+            ([uri]$env:JFROG_URL).DnsSafeHost
+            'repo.maven.apache.org'
+          )
+          $javaHostEntries = foreach ($javaHost in $javaHosts) {
+            $javaAddress = [System.Net.Dns]::GetHostAddresses($javaHost) |
+              Where-Object AddressFamily -eq ([System.Net.Sockets.AddressFamily]::InterNetwork) |
+              Select-Object -First 1
+            if (-not $javaAddress) { throw "Could not resolve an IPv4 address for $javaHost" }
+            "$($javaAddress.IPAddressToString) $javaHost"
+          }
+          $javaHostEntries | Set-Content -LiteralPath 'C:\harness\java.hosts' -Encoding ascii
+        }
+
+        $projectDir = 'access token project with spaces'
+        New-Item -ItemType Directory -Force "$projectDir/src/main/java/io/harness/artifactory", 'access token generic' | Out-Null
+        @"
+        <?xml version="1.0" encoding="UTF-8"?>
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>io.harness.artifactory</groupId>
+          <artifactId>access-token-fixture-$($env:LTSC)</artifactId>
+          <version>1.0.$($env:PIPELINE_SEQUENCE_ID)</version>
+          <properties>
+            <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+            <maven.compiler.release>17</maven.compiler.release>
+          </properties>
+        </project>
+        "@ | Set-Content -LiteralPath "$projectDir/pom.xml" -Encoding utf8
+        @"
+        plugins {
+          id "java"
+          id "maven-publish"
+        }
+        group = "io.harness.artifactory"
+        version = "1.0.$($env:PIPELINE_SEQUENCE_ID)"
+        java {
+          toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+          }
+        }
+        publishing {
+          publications {
+            fixture(MavenPublication) {
+              from components.java
+            }
+          }
+        }
+        "@ | Set-Content -LiteralPath "$projectDir/build.gradle" -Encoding utf8
+        "rootProject.name = `"access-token-fixture-$($env:LTSC)`"" |
+          Set-Content -LiteralPath "$projectDir/settings.gradle" -Encoding utf8
+        @'
+        package io.harness.artifactory;
+        public final class Fixture {
+          private Fixture() {}
+          public static String value() { return "access-token"; }
+        }
+        '@ | Set-Content -LiteralPath "$projectDir/src/main/java/io/harness/artifactory/Fixture.java" -Encoding utf8
+        "access token qualification $($env:LTSC)" |
+          Set-Content -LiteralPath 'access token generic/artifact with spaces.txt' -Encoding utf8
+
+        Write-Output "LTSC $($env:LTSC) access-token preflight and fixtures passed"
+    - name: verifyScript
+      type: String
+      value: |-
+        $ErrorActionPreference = 'Stop'
+        if ($env:LTSC -eq '2025' -and (Test-Path -LiteralPath 'C:\harness\java.hosts' -PathType Leaf)) {
+          Get-Content -LiteralPath 'C:\harness\java.hosts' |
+            Add-Content -LiteralPath "$env:SystemRoot\System32\drivers\etc\hosts" -Encoding ascii
+        }
+        $downloaded = @(Get-ChildItem -LiteralPath 'access-token-download' -File -Recurse)
+        if ($downloaded.Count -ne 1 -or $downloaded[0].Name -ne 'artifact with spaces.txt') {
+          throw "Expected one downloaded access-token artifact; observed: $($downloaded.FullName -join ', ')"
+        }
+        if ((Get-Content -LiteralPath $downloaded[0].FullName -Raw).Trim() -ne "access token qualification $($env:LTSC)") {
+          throw 'Downloaded artifact content mismatch'
+        }
+        $artifactory = $env:JFROG_URL.TrimEnd('/')
+        if (-not $artifactory.EndsWith('/artifactory', [StringComparison]::OrdinalIgnoreCase)) {
+          $artifactory += '/artifactory'
+        }
+        $headers = @{Authorization = "Bearer $($env:JFROG_ACCESS_TOKEN)"}
+        foreach ($kind in @('maven', 'gradle', 'generic')) {
+          $name = "access-token-$kind-ltsc$($env:LTSC)"
+          $encodedName = [uri]::EscapeDataString($name)
+          $build = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri "$artifactory/api/build/$encodedName/$($env:PIPELINE_SEQUENCE_ID)"
+          if ([int]$build.StatusCode -ne 200) {
+            throw "Build info is absent for $name; HTTP $([int]$build.StatusCode): $($build.Content)"
+          }
+        }
+        Write-Output "LTSC $($env:LTSC) access-token Maven, Gradle, upload, download, and build-info qualification passed"
+  stages:
+    - parallel:
+        - stage:
+            name: Qualify access token LTSC 2019
+            identifier: qualify_access_token_ltsc2019
+            type: CI
+            spec:
+              cloneCodebase: false
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: gcopdmwindowsbuildfarm
+                  namespace: <+pipeline.variables.namespace>
+                  os: Windows
+                  automountServiceAccountToken: true
+                  serviceAccountName: ci-image-e2e-reader
+                  nodeSelector:
+                    kubernetes.io/os: windows
+                    node.kubernetes.io/windows-build: "10.0.17763"
+                  tolerations:
+                    - {effect: NoSchedule, key: node.kubernetes.io/os, operator: Equal, value: windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Prepare and preflight access token
+                      identifier: prepare_preflight_access_token
+                      timeout: 20m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          POD_NAMESPACE: <+pipeline.variables.namespace>
+                          CANDIDATE_IMAGE: <+pipeline.variables.windows2019Candidate>
+                          EXPECTED_WINDOWS_BUILD: "17763"
+                          LTSC: "2019"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_ACCESS_TOKEN: <+pipeline.variables.jfrogAccessToken>
+                          MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                          MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                          GENERIC_REPO: <+pipeline.variables.genericRepo>
+                        command: <+pipeline.variables.prepareScript>
+                  - step:
+                      type: Plugin
+                      name: Maven publish with access token
+                      identifier: maven_publish_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          build_tool: mvn
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          project_dir: access token project with spaces
+                          pom_file: pom.xml
+                          deploy_release_repo: <+pipeline.variables.mavenReleaseRepo>
+                          deploy_snapshot_repo: <+pipeline.variables.mavenSnapshotRepo>
+                          build_name: access-token-maven-ltsc2019
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Plugin
+                      name: Gradle publish with access token
+                      identifier: gradle_publish_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          build_tool: gradle
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          project_dir: access token project with spaces
+                          build_file: build.gradle
+                          repo_deploy: <+pipeline.variables.mavenReleaseRepo>
+                          repo_resolve: <+pipeline.variables.mavenReleaseRepo>
+                          build_name: access-token-gradle-ltsc2019
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Plugin
+                      name: Generic upload with access token
+                      identifier: generic_upload_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          source: access token generic/*
+                          target: <+pipeline.variables.genericRepo>/access-token/ltsc2019/<+pipeline.sequenceId>/
+                          build_name: access-token-generic-ltsc2019
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Plugin
+                      name: Generic download with access token
+                      identifier: generic_download_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          command: download
+                          build_tool: mvn
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          source: <+pipeline.variables.genericRepo>/access-token/ltsc2019/<+pipeline.sequenceId>/*
+                          target: access-token-download/
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Run
+                      name: Verify access token results
+                      identifier: verify_access_token_results
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          LTSC: "2019"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_ACCESS_TOKEN: <+pipeline.variables.jfrogAccessToken>
+                        command: <+pipeline.variables.verifyScript>
+        - stage:
+            name: Qualify access token LTSC 2022
+            identifier: qualify_access_token_ltsc2022
+            type: CI
+            spec:
+              cloneCodebase: false
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: gcopdmwindowsbuildfarm
+                  namespace: <+pipeline.variables.namespace>
+                  os: Windows
+                  automountServiceAccountToken: true
+                  serviceAccountName: ci-image-e2e-reader
+                  nodeSelector:
+                    kubernetes.io/os: windows
+                    node.kubernetes.io/windows-build: "10.0.20348"
+                  tolerations:
+                    - {effect: NoSchedule, key: node.kubernetes.io/os, operator: Equal, value: windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Prepare and preflight access token
+                      identifier: prepare_preflight_access_token
+                      timeout: 20m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          POD_NAMESPACE: <+pipeline.variables.namespace>
+                          CANDIDATE_IMAGE: <+pipeline.variables.windows2022Candidate>
+                          EXPECTED_WINDOWS_BUILD: "20348"
+                          LTSC: "2022"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_ACCESS_TOKEN: <+pipeline.variables.jfrogAccessToken>
+                          MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                          MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                          GENERIC_REPO: <+pipeline.variables.genericRepo>
+                        command: <+pipeline.variables.prepareScript>
+                  - step:
+                      type: Plugin
+                      name: Maven publish with access token
+                      identifier: maven_publish_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          build_tool: mvn
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          project_dir: access token project with spaces
+                          pom_file: pom.xml
+                          deploy_release_repo: <+pipeline.variables.mavenReleaseRepo>
+                          deploy_snapshot_repo: <+pipeline.variables.mavenSnapshotRepo>
+                          build_name: access-token-maven-ltsc2022
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Plugin
+                      name: Gradle publish with access token
+                      identifier: gradle_publish_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          build_tool: gradle
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          project_dir: access token project with spaces
+                          build_file: build.gradle
+                          repo_deploy: <+pipeline.variables.mavenReleaseRepo>
+                          repo_resolve: <+pipeline.variables.mavenReleaseRepo>
+                          build_name: access-token-gradle-ltsc2022
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Plugin
+                      name: Generic upload with access token
+                      identifier: generic_upload_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          source: access token generic/*
+                          target: <+pipeline.variables.genericRepo>/access-token/ltsc2022/<+pipeline.sequenceId>/
+                          build_name: access-token-generic-ltsc2022
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Plugin
+                      name: Generic download with access token
+                      identifier: generic_download_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          command: download
+                          build_tool: mvn
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          source: <+pipeline.variables.genericRepo>/access-token/ltsc2022/<+pipeline.sequenceId>/*
+                          target: access-token-download/
+                          enable_proxy: false
+                        envVariables: {JFROG_CLI_RETRIES: "3"}
+                  - step:
+                      type: Run
+                      name: Verify access token results
+                      identifier: verify_access_token_results
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          LTSC: "2022"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_ACCESS_TOKEN: <+pipeline.variables.jfrogAccessToken>
+                        command: <+pipeline.variables.verifyScript>
+        - stage:
+            name: Qualify access token LTSC 2025
+            identifier: qualify_access_token_ltsc2025
+            type: CI
+            spec:
+              cloneCodebase: false
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: gcopdmwindows2025
+                  namespace: <+pipeline.variables.namespace>
+                  os: Windows
+                  automountServiceAccountToken: true
+                  serviceAccountName: ci-image-e2e-reader
+                  nodeSelector:
+                    kubernetes.io/os: windows
+                    node.kubernetes.io/windows-build: "10.0.26100"
+                  tolerations:
+                    - {effect: NoSchedule, key: node.kubernetes.io/os, operator: Equal, value: windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Prepare and preflight access token
+                      identifier: prepare_preflight_access_token
+                      timeout: 20m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          POD_NAMESPACE: <+pipeline.variables.namespace>
+                          CANDIDATE_IMAGE: <+pipeline.variables.windows2025Candidate>
+                          EXPECTED_WINDOWS_BUILD: "26100"
+                          LTSC: "2025"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_ACCESS_TOKEN: <+pipeline.variables.jfrogAccessToken>
+                          MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                          MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                          GENERIC_REPO: <+pipeline.variables.genericRepo>
+                        command: <+pipeline.variables.prepareScript>
+                  - step:
+                      type: Plugin
+                      name: Maven publish with access token
+                      identifier: maven_publish_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          build_tool: mvn
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          project_dir: access token project with spaces
+                          pom_file: pom.xml
+                          deploy_release_repo: <+pipeline.variables.mavenReleaseRepo>
+                          deploy_snapshot_repo: <+pipeline.variables.mavenSnapshotRepo>
+                          build_name: access-token-maven-ltsc2025
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables:
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: oidctest.jfrog.io
+                          JFROG_CLI_RETRIES: "3"
+                          JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\java.hosts -Djava.net.preferIPv4Stack=true"
+                  - step:
+                      type: Plugin
+                      name: Gradle publish with access token
+                      identifier: gradle_publish_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          build_tool: gradle
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          project_dir: access token project with spaces
+                          build_file: build.gradle
+                          repo_deploy: <+pipeline.variables.mavenReleaseRepo>
+                          repo_resolve: <+pipeline.variables.mavenReleaseRepo>
+                          build_name: access-token-gradle-ltsc2025
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables:
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: oidctest.jfrog.io
+                          JFROG_CLI_RETRIES: "3"
+                          JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\java.hosts -Djava.net.preferIPv4Stack=true"
+                  - step:
+                      type: Plugin
+                      name: Generic upload with access token
+                      identifier: generic_upload_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          source: access token generic/*
+                          target: <+pipeline.variables.genericRepo>/access-token/ltsc2025/<+pipeline.sequenceId>/
+                          build_name: access-token-generic-ltsc2025
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: false
+                        envVariables:
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: oidctest.jfrog.io
+                          JFROG_CLI_RETRIES: "3"
+                  - step:
+                      type: Plugin
+                      name: Generic download with access token
+                      identifier: generic_download_access_token
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          command: download
+                          build_tool: mvn
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogAccessToken>
+                          source: <+pipeline.variables.genericRepo>/access-token/ltsc2025/<+pipeline.sequenceId>/*
+                          target: access-token-download/
+                          enable_proxy: false
+                        envVariables:
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: oidctest.jfrog.io
+                          JFROG_CLI_RETRIES: "3"
+                  - step:
+                      type: Run
+                      name: Verify access token results
+                      identifier: verify_access_token_results
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          LTSC: "2025"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_ACCESS_TOKEN: <+pipeline.variables.jfrogAccessToken>
+                        command: <+pipeline.variables.verifyScript>
