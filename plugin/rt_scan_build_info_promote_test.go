@@ -51,7 +51,7 @@ func TestGetBuildInfoPublishCommandUserPassword(t *testing.T) {
 	wantCmds := []string{
 		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME " +
 			"--password $PLUGIN_PASSWORD --interactive=false",
-		"rt build-publish t2 v1.0",
+		"rt build-publish t2 v1.0 --server-id=tmpServerId --project=backend_project",
 	}
 
 	for i, cmd := range cmdList {
@@ -59,6 +59,17 @@ func TestGetBuildInfoPublishCommandUserPassword(t *testing.T) {
 		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
+	}
+}
+
+func TestGetBuildInfoPublishCommandRequiresBuildCoordinates(t *testing.T) {
+	_, err := GetBuildInfoPublishCommandArgs(Args{
+		Username: "ab",
+		Password: "cd",
+		URL:      RtUrlTestStr,
+	})
+	if err == nil || !strings.Contains(err.Error(), "build_name and build_number") {
+		t.Fatalf("expected missing build coordinates error, got %v", err)
 	}
 }
 
@@ -111,7 +122,7 @@ func TestAddDependenciesCommandUserPassword(t *testing.T) {
 	wantCmds := []string{
 		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-add-dependencies --module=backend_module --project=backend_project --spec=spec.json --server-id=tmpServerId t2 v1.0",
-		"rt build-publish t2 v1.0",
+		"rt build-publish t2 v1.0 --server-id=tmpServerId --project=backend_project",
 	}
 
 	for i, cmd := range cmdList {

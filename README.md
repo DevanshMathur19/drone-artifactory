@@ -62,6 +62,9 @@ docker run --rm \
 ### Gradle Build and Publish reference
 [Go to Gradle reference](./docs/GRADLE_README.md)
 
+### npm Build and Publish reference
+[Go to npm reference](./docs/NPM_README.md)
+
 ## Community and Support
 [Harness Community Slack](https://join.slack.com/t/harnesscommunity/shared_invite/zt-y4hdqh7p-RVuEQyIl5Hcx4Ck8VCvzBw) - Join the #drone slack channel to connect with our engineers and other users running Drone CI.
 

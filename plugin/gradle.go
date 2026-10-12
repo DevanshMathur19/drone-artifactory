@@ -46,9 +46,9 @@ func GetGradleCommandArgs(args Args) ([][]string, error) {
 	if runtime.GOOS == "windows" {
 		// These parameters prevent all interactive prompts
 		gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--global=true")
-		// Add server ID for deployment/resolution
+		// PopulateArgs adds the resolver ID below. Add only the deploy ID here;
+		// adding both would duplicate --server-id-resolve on Windows.
 		if args.ResolverId != "" {
-			gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-resolve="+args.ResolverId)
 			gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-deploy="+args.ResolverId)
 		}
 		// Add repos to prevent prompts

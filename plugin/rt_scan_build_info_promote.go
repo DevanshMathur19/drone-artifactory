@@ -29,6 +29,9 @@ func GetScanCommandArgs(args Args) ([][]string, error) {
 
 func GetBuildInfoPublishCommandArgs(args Args) ([][]string, error) {
 	var cmdList [][]string
+	if args.BuildName == "" || args.BuildNumber == "" {
+		return cmdList, errors.New("valid build_name and build_number are required")
+	}
 
 	tmpServerId := tmpServerId
 	jfrogConfigAddConfigCommandArgs, err := GetConfigAddConfigCommandArgs(tmpServerId,
@@ -38,6 +41,10 @@ func GetBuildInfoPublishCommandArgs(args Args) ([][]string, error) {
 		return cmdList, err
 	}
 	buildInfoCommandArgs := []string{"rt", "build-publish", args.BuildName, args.BuildNumber}
+	buildInfoCommandArgs = append(buildInfoCommandArgs, "--server-id="+tmpServerId)
+	if args.Project != "" {
+		buildInfoCommandArgs = append(buildInfoCommandArgs, "--project="+args.Project)
+	}
 	err = PopulateArgs(&buildInfoCommandArgs, &args, nil)
 	if err != nil {
 		return cmdList, err
@@ -97,6 +104,10 @@ func GetAddDependenciesCommandArgs(args Args) ([][]string, error) {
 	}
 
 	buildInfoCommandArgs := []string{"rt", "build-publish", args.BuildName, args.BuildNumber}
+	buildInfoCommandArgs = append(buildInfoCommandArgs, "--server-id="+tmpServerId)
+	if args.Project != "" {
+		buildInfoCommandArgs = append(buildInfoCommandArgs, "--project="+args.Project)
+	}
 	err = PopulateArgs(&buildInfoCommandArgs, &args, nil)
 	if err != nil {
 		return cmdList, err

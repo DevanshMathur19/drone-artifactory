@@ -21,6 +21,8 @@ const (
 	Publish      = "publish"
 	GradleConfig = "gradle-config"
 	GradleCmd    = "gradle"
+	NpmConfig    = "npm-config"
+	NpmCmd       = "npm"
 	tmpServerId  = "tmpServerId"
 )
 
@@ -55,7 +57,7 @@ func HandleRtCommands(ctx context.Context, args Args) error {
 		}
 	}
 
-	if (args.PublishBuildInfo || args.Command == Publish) && args.Command != "publish-build-info" {
+	if shouldPublishBuildInfo(args) {
 		if err := publishBuildInfo(ctx, args); err != nil {
 			logrus.Println("Error publishing build info: ", err)
 			return err
@@ -63,6 +65,18 @@ func HandleRtCommands(ctx context.Context, args Args) error {
 	}
 
 	return nil
+}
+
+func shouldPublishBuildInfo(args Args) bool {
+	if args.Command == "publish-build-info" || args.Command == "add-build-dependencies" {
+		return false
+	}
+	if args.PublishBuildInfo {
+		return true
+	}
+	// Preserve the existing Maven and Gradle publish contract. npm follows the
+	// explicit publish_build_info setting documented for the new integration.
+	return args.Command == Publish && (args.BuildTool == MvnCmd || args.BuildTool == GradleCmd)
 }
 
 func WriteKnownGoodServerCertsForTls(args Args) error {
@@ -192,6 +206,9 @@ func getBuildToolCommands(args Args) ([][]string, error) {
 	case args.BuildTool == GradleCmd && args.Command == Publish:
 		logrus.Println("Gradle publish start")
 		return GetGradlePublishCommand(args)
+	case args.BuildTool == NpmCmd:
+		logrus.Println("npm operation start")
+		return GetNpmCommandArgs(args)
 	default:
 		return nil, fmt.Errorf(
 			"unsupported build_tool/command combination: %q/%q",

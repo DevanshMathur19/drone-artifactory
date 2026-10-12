@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode"
 )
@@ -118,6 +119,76 @@ func materializeCommand(command []string, args Args) []string {
 	return materialized
 }
 
+func replaceEnvironmentValue(environment []string, name, value string) []string {
+	for index, entry := range environment {
+		key, _, found := strings.Cut(entry, "=")
+		if found && strings.EqualFold(key, name) {
+			environment[index] = name + "=" + value
+			return environment
+		}
+	}
+	return append(environment, name+"="+value)
+}
+
+func prepareNpmEnvironment(command []string, args Args, environment []string) ([]string, func(), error) {
+	if args.NpmVersion == "" || len(command) < 2 || command[1] != NpmCmd {
+		return environment, func() {}, nil
+	}
+	allowed := map[string]struct{}{
+		"5.6.0":  {},
+		"6.4.1":  {},
+		"6.11.3": {},
+		"6.14.4": {},
+		"6.14.7": {},
+		"6.14.8": {},
+	}
+	if _, ok := allowed[args.NpmVersion]; !ok {
+		return nil, nil, fmt.Errorf("unsupported npm_version %q", args.NpmVersion)
+	}
+
+	root := os.Getenv("ARTIFACTORY_NPM_ROOT")
+	if root == "" {
+		if runtime.GOOS == "windows" {
+			root = `C:\tools\npm`
+		} else {
+			root = "/opt/npm"
+		}
+	}
+	npmCLI := filepath.Join(root, args.NpmVersion, "bin", "npm-cli.js")
+	if info, err := os.Stat(npmCLI); err != nil || info.IsDir() {
+		if err == nil {
+			err = fmt.Errorf("path is a directory")
+		}
+		return nil, nil, fmt.Errorf("npm_version %q is unavailable at %q: %w", args.NpmVersion, npmCLI, err)
+	}
+
+	shimDirectory, err := os.MkdirTemp("", "drone-artifactory-npm-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("create npm selector: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(shimDirectory) }
+
+	var (
+		shimName string
+		content  string
+	)
+	if runtime.GOOS == "windows" {
+		shimName = "npm.cmd"
+		content = fmt.Sprintf("@echo off\r\nnode.exe \"%s\" %%*\r\n", npmCLI)
+	} else {
+		shimName = "npm"
+		escapedCLI := strings.ReplaceAll(npmCLI, "'", "'\"'\"'")
+		content = fmt.Sprintf("#!/bin/sh\nexec node '%s' \"$@\"\n", escapedCLI)
+	}
+	if err := os.WriteFile(filepath.Join(shimDirectory, shimName), []byte(content), 0700); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("write npm selector: %w", err)
+	}
+
+	pathValue := shimDirectory + string(os.PathListSeparator) + os.Getenv("PATH")
+	return replaceEnvironmentValue(environment, "PATH", pathValue), cleanup, nil
+}
+
 func runCommand(ctx context.Context, args Args, command []string, captureStdout bool) ([]byte, error) {
 	if len(command) == 0 || command[0] == "" {
 		return nil, fmt.Errorf("cannot execute an empty command")
@@ -130,10 +201,16 @@ func runCommand(ctx context.Context, args Args, command []string, captureStdout 
 	executionCommand := materializeCommand(command, args)
 	cmd := exec.CommandContext(ctx, executionCommand[0], executionCommand[1:]...)
 	cmd.Dir = directory
-	cmd.Env = append(os.Environ(),
+	environment := append(os.Environ(),
 		"JFROG_CLI_OFFER_CONFIG=false",
 		"JFROG_CLI_AVOID_NEW_VERSION_WARNING=true",
 	)
+	environment, cleanup, err := prepareNpmEnvironment(command, args, environment)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	cmd.Env = environment
 
 	var stdout bytes.Buffer
 	if captureStdout {

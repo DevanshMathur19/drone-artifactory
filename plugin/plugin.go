@@ -77,6 +77,9 @@ type Args struct {
 	RepoDeploy  string `envconfig:"PLUGIN_REPO_DEPLOY"`
 	RepoResolve string `envconfig:"PLUGIN_REPO_RESOLVE"`
 
+	// npm commands
+	NpmVersion string `envconfig:"PLUGIN_NPM_VERSION"`
+
 	// Upload Download commands
 	SpecPath string `envconfig:"PLUGIN_SPEC_PATH"`
 	Module   string `envconfig:"PLUGIN_MODULE"`
@@ -227,13 +230,26 @@ func Exec(ctx context.Context, args Args) error {
 }
 
 func publishBuildInfo(ctx context.Context, args Args) error {
+	publishCmdArgs, err := getCentralBuildInfoPublishCommandArgs(args)
+	if err != nil {
+		return err
+	}
+
+	if err := ExecCommand(ctx, args, publishCmdArgs); err != nil {
+		return fmt.Errorf("error publishing build info: %w", err)
+	}
+
+	return nil
+}
+
+func getCentralBuildInfoPublishCommandArgs(args Args) ([]string, error) {
 	if args.BuildName == "" || args.BuildNumber == "" {
-		return fmt.Errorf("both build name and build number need to be set when publishing build info")
+		return nil, fmt.Errorf("both build name and build number need to be set when publishing build info")
 	}
 
 	sanitizedURL, err := normalizeArtifactoryURL(args.URL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	publishCmdArgs := []string{
@@ -244,17 +260,16 @@ func publishBuildInfo(ctx context.Context, args Args) error {
 		args.BuildNumber,
 		"--url=" + sanitizedURL,
 	}
+	if args.Project != "" {
+		publishCmdArgs = append(publishCmdArgs, "--project="+args.Project)
+	}
 
 	publishCmdArgs, err = setAuthParams(publishCmdArgs, args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := ExecCommand(ctx, args, publishCmdArgs); err != nil {
-		return fmt.Errorf("error publishing build info: %w", err)
-	}
-
-	return nil
+	return publishCmdArgs, nil
 }
 
 // Function to filter TargetProps based on criteria
