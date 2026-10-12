@@ -721,7 +721,7 @@ pipeline:
                           build_name: artifactory-qualification-maven-ltsc2025
                           build_number: <+pipeline.sequenceId>
                           publish_build_info: true
-                          enable_proxy: true
+                          enable_proxy: false
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
@@ -748,7 +748,7 @@ pipeline:
                           build_name: artifactory-qualification-gradle-ltsc2025
                           build_number: <+pipeline.sequenceId>
                           publish_build_info: true
-                          enable_proxy: true
+                          enable_proxy: false
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
@@ -771,7 +771,7 @@ pipeline:
                           build_name: artifactory-qualification-generic-ltsc2025
                           build_number: <+pipeline.sequenceId>
                           publish_build_info: true
-                          enable_proxy: true
+                          enable_proxy: false
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
@@ -801,7 +801,7 @@ pipeline:
                           password: <+pipeline.variables.jfrogPassword>
                           source: <+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/native/**
                           target: downloads/direct/files with spaces/
-                          enable_proxy: true
+                          enable_proxy: false
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
@@ -822,7 +822,7 @@ pipeline:
                           password: <+pipeline.variables.jfrogPassword>
                           spec: |-
                             {"files":[{"pattern":"<+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/native/**","target":"downloads/spec/"}]}
-                          enable_proxy: true
+                          enable_proxy: false
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
