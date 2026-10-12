@@ -1,0 +1,846 @@
+pipeline:
+  name: Artifactory Plugin - Windows KubernetesDirect Qualification-dm
+  identifier: artifactory_plugin_windows_qualify_dm
+  projectIdentifier: Drone_Plugins
+  orgIdentifier: default
+  variables:
+    - {name: dockerConnector, type: String, value: dmdockerconn}
+    - {name: namespace, type: String, value: cie-test}
+    - {name: windows2019Candidate, type: String, value: "plugins/artifactory@sha256:4e089631f5adeebadc84641dee02098524584f77bcce323f63e4b1f2f46bf209"}
+    - {name: windows2022Candidate, type: String, value: "plugins/artifactory@sha256:42c96c565cc17e30a275bce89709d5ed555d2aca6c09c5bcd0b55a216a71bffc"}
+    - {name: windows2025Candidate, type: String, value: "plugins/artifactory@sha256:ea970fe1fb3ca195cd7dd25027e8c81fd99d710bc75c86dc1b58226cbdfcc009"}
+    - {name: jfrogUrl, type: String, value: "https://oidctest.jfrog.io"}
+    - {name: jfrogUsername, type: String, value: "chirags.221cs214@nitk.edu.in"}
+    - {name: jfrogPassword, type: Secret, value: chiragoidctestPAT}
+    - {name: artifactoryConnector, type: String, value: chiragoidctest}
+    - {name: mavenReleaseRepo, type: String, value: artifactory-maven-release-dm}
+    - {name: mavenSnapshotRepo, type: String, value: artifactory-maven-snapshot-dm}
+    - {name: genericRepo, type: String, value: artifactory-generic-dm}
+    - {name: httpsProxy, type: String, value: <+input>.default("")}
+    - {name: noProxy, type: String, value: <+input>.default("")}
+    - name: qualificationScript
+      type: String
+      value: |-
+        $ErrorActionPreference = 'Stop'
+        Set-StrictMode -Version Latest
+
+        $candidate = $env:CANDIDATE_IMAGE
+        if ($candidate -notmatch '@(sha256:[0-9a-f]{64})$') {
+          throw 'Candidate must be digest pinned'
+        }
+        $expectedDigest = $Matches[1]
+        $actualBuild = [System.Environment]::OSVersion.Version.Build.ToString()
+        if ($actualBuild -ne $env:EXPECTED_WINDOWS_BUILD) {
+          throw "Expected Windows build $env:EXPECTED_WINDOWS_BUILD; observed $actualBuild"
+        }
+
+        foreach ($command in @('pwsh', 'jf', 'jfrog', 'java', 'mvn', 'gradle')) {
+          if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
+            throw "Required command is unavailable: $command"
+          }
+        }
+        if (-not (Test-Path -LiteralPath 'C:\bin\drone-artifactory.exe' -PathType Leaf)) {
+          throw 'Plugin entrypoint is missing'
+        }
+        if ((& java -version 2>&1 | Out-String) -notmatch '17\.0\.19') { throw 'Unexpected Java version' }
+        if ((& mvn --version 2>&1 | Out-String) -notmatch '3\.9\.11') { throw 'Unexpected Maven version' }
+        if ((& gradle --version 2>&1 | Out-String) -notmatch '8\.13') { throw 'Unexpected Gradle version' }
+        if ((& jfrog --version 2>&1 | Out-String) -notmatch '2\.115\.0') { throw 'Unexpected JFrog CLI version' }
+        if ((& pwsh -NoLogo -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()' | Out-String) -notmatch '^7\.4\.13') {
+          throw 'Unexpected PowerShell version'
+        }
+
+        $tokenPath = 'C:\var\run\secrets\kubernetes.io\serviceaccount\token'
+        $caPath = 'C:\var\run\secrets\kubernetes.io\serviceaccount\ca.crt'
+        if (-not (Test-Path -LiteralPath $tokenPath) -or -not (Test-Path -LiteralPath $caPath)) {
+          throw 'Kubernetes service-account credentials are not mounted'
+        }
+        $token = Get-Content -LiteralPath $tokenPath -Raw
+        $namespace = $env:POD_NAMESPACE
+        $pod = if ($env:POD_NAME) { $env:POD_NAME } else { $env:COMPUTERNAME }
+        $base = "https://$($env:KUBERNETES_SERVICE_HOST):$($env:KUBERNETES_SERVICE_PORT_HTTPS)/api/v1/namespaces/$namespace/pods"
+        $curl = @('--fail', '--silent', '--show-error', '--ssl-no-revoke', '--cacert', $caPath, '-H', "Authorization: Bearer $token")
+        $json = & curl.exe @curl "$base/$pod"
+        if ($LASTEXITCODE -ne 0) {
+          $listing = (& curl.exe @curl $base | ConvertFrom-Json).items
+          $addresses = @(
+            [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
+              Where-Object AddressFamily -eq ([System.Net.Sockets.AddressFamily]::InterNetwork) |
+              ForEach-Object IPAddressToString
+          )
+          $matches = @($listing | Where-Object { $addresses -contains [string] $_.status.podIP })
+          if ($matches.Count -ne 1) { throw "Could not identify the current Pod in namespace $namespace" }
+          $status = $matches[0].status
+        } else {
+          $status = ($json | ConvertFrom-Json).status
+        }
+        $imageIds = @($status.containerStatuses | ForEach-Object { [string] $_.imageID })
+        $matching = @($imageIds | Where-Object { $_ -match "@$([regex]::Escape($expectedDigest))$" })
+        if ($matching.Count -lt 1) {
+          throw "Expected running imageID $expectedDigest; observed: $($imageIds -join ', ')"
+        }
+        Write-Output "Running imageID verified: $($matching -join ', ')"
+
+        $artifactory = $env:JFROG_URL.TrimEnd('/')
+        if (-not $artifactory.EndsWith('/artifactory', [StringComparison]::OrdinalIgnoreCase)) {
+          $artifactory += '/artifactory'
+        }
+        $handler = [System.Net.Http.HttpClientHandler]::new()
+        $handler.AllowAutoRedirect = $false
+        $client = [System.Net.Http.HttpClient]::new($handler)
+        try {
+          $ping = $client.GetAsync("$artifactory/api/system/ping").GetAwaiter().GetResult()
+          if ([int]$ping.StatusCode -ge 300 -and [int]$ping.StatusCode -lt 400) {
+            throw "Artifactory endpoint redirected to $($ping.Headers.Location)"
+          }
+          if (-not $ping.IsSuccessStatusCode) {
+            throw "Artifactory ping failed with HTTP $([int]$ping.StatusCode)"
+          }
+          $pingBody = $ping.Content.ReadAsStringAsync().GetAwaiter().GetResult().Trim()
+          if ($pingBody -ne 'OK') { throw "Artifactory ping returned an unexpected response: $pingBody" }
+
+          $credentialBytes = [System.Text.Encoding]::UTF8.GetBytes("$($env:JFROG_USERNAME):$($env:JFROG_PASSWORD)")
+          $client.DefaultRequestHeaders.Authorization =
+            [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Basic', [Convert]::ToBase64String($credentialBytes))
+          $reposResponse = $client.GetAsync("$artifactory/api/repositories").GetAwaiter().GetResult()
+          if (-not $reposResponse.IsSuccessStatusCode) {
+            throw "Artifactory repository inventory failed with HTTP $([int]$reposResponse.StatusCode)"
+          }
+          $repos = @($reposResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json)
+          $repoKeys = @($repos | ForEach-Object { $_.key })
+          foreach ($requiredRepo in @($env:MAVEN_RELEASE_REPO, $env:MAVEN_SNAPSHOT_REPO, $env:GENERIC_REPO)) {
+            if ($repoKeys -notcontains $requiredRepo) { throw "Required Artifactory repository is absent: $requiredRepo" }
+          }
+        } finally {
+          $client.Dispose()
+          $handler.Dispose()
+        }
+
+        $projectDir = 'project dir with spaces'
+        New-Item -ItemType Directory -Force "$projectDir/src/main/java/io/harness/artifactory", 'generic/files with spaces/nested' | Out-Null
+        @"
+        <?xml version="1.0" encoding="UTF-8"?>
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>io.harness.artifactory</groupId>
+          <artifactId>artifactory-windows-fixture-$($env:LTSC)</artifactId>
+          <version>1.0.$($env:PIPELINE_SEQUENCE_ID)</version>
+          <properties>
+            <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+            <maven.compiler.release>17</maven.compiler.release>
+          </properties>
+        </project>
+        "@ | Set-Content -LiteralPath "$projectDir/pom.xml" -Encoding utf8
+        @"
+        plugins {
+          id "java"
+          id "maven-publish"
+        }
+        group = "io.harness.artifactory"
+        version = "1.0.$($env:PIPELINE_SEQUENCE_ID)"
+        java {
+          toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+          }
+        }
+        publishing {
+          publications {
+            fixture(MavenPublication) {
+              from components.java
+            }
+          }
+        }
+        "@ | Set-Content -LiteralPath "$projectDir/build.gradle" -Encoding utf8
+        "rootProject.name = `"artifactory-windows-fixture-$($env:LTSC)`"" |
+          Set-Content -LiteralPath "$projectDir/settings.gradle" -Encoding utf8
+        @'
+        package io.harness.artifactory;
+        public final class Fixture {
+          private Fixture() {}
+          public static String value() { return "artifactory-windows-fixture"; }
+        }
+        '@ | Set-Content -LiteralPath "$projectDir/src/main/java/io/harness/artifactory/Fixture.java" -Encoding utf8
+        "root artifact for $($env:LTSC)" | Set-Content -LiteralPath 'generic/files with spaces/root artifact.txt' -Encoding utf8
+        "{`"platform`":`"$($env:LTSC)`",`"sequence`":`"$($env:PIPELINE_SEQUENCE_ID)`"}" |
+          Set-Content -LiteralPath 'generic/files with spaces/nested/deep artifact.json' -Encoding utf8
+
+        $savedErrorPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $env:PLUGIN_COMMAND = 'download'
+        $env:PLUGIN_URL = $env:JFROG_URL
+        $env:PLUGIN_USERNAME = $env:JFROG_USERNAME
+        $env:PLUGIN_PASSWORD = 'known-invalid-password'
+        $env:PLUGIN_SOURCE = "$($env:GENERIC_REPO)/missing.txt"
+        $env:PLUGIN_TARGET = 'C:\temp\missing.txt'
+        $invalidOutput = (& 'C:\bin\drone-artifactory.exe' 2>&1 | Out-String)
+        $invalidCredentialExit = $LASTEXITCODE
+        $ErrorActionPreference = $savedErrorPreference
+        Remove-Item Env:PLUGIN_PASSWORD -ErrorAction SilentlyContinue
+        if ($invalidCredentialExit -eq 0) { throw 'Invalid credentials returned false success' }
+        if ($invalidOutput -notmatch '(?i)(401|403|unauthori[sz]ed|forbidden|authentication (failed|required)|incorrect (username or )?password|bad credentials|access denied)') {
+          throw "Invalid-credential test failed without an actionable authentication diagnostic: $invalidOutput"
+        }
+
+        Write-Output "LTSC $($env:LTSC) contract, image identity, endpoint, repository inventory, fixtures, and negative auth passed"
+  stages:
+    - stage:
+        name: Verify JFrog tenant
+        identifier: verify_jfrog_tenant
+        type: CI
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Require active authenticated Artifactory API
+                  identifier: require_active_authenticated_artifactory_api
+                  timeout: 10m
+                  spec:
+                    connectorRef: <+pipeline.variables.dockerConnector>
+                    image: curlimages/curl@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6
+                    shell: Sh
+                    envVariables:
+                      JFROG_URL: <+pipeline.variables.jfrogUrl>
+                      JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                      JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                      MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                      MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                      GENERIC_REPO: <+pipeline.variables.genericRepo>
+                    command: |-
+                      set -eu
+                      artifactory=${JFROG_URL%/}
+                      case "$artifactory" in
+                        */artifactory) ;;
+                        *) artifactory="$artifactory/artifactory" ;;
+                      esac
+                      for endpoint in api/system/ping api/repositories; do
+                        status=$(curl --silent --show-error --max-redirs 0 \
+                          --user "$JFROG_USERNAME:$JFROG_PASSWORD" \
+                          --dump-header headers.txt --output body.txt \
+                          --write-out '%{http_code}' "$artifactory/$endpoint")
+                        if [ "$status" != 200 ]; then
+                          location=$(tr -d '\r' <headers.txt | awk 'tolower($1) == "location:" {print $2}')
+                          echo "JFrog preflight failed for $endpoint: HTTP $status${location:+, redirect=$location}" >&2
+                          exit 1
+                        fi
+                      done
+                      [ "$(tr -d '[:space:]' <body.txt | cut -c1)" = "[" ] || {
+                        echo "JFrog repositories API did not return a JSON array" >&2
+                        exit 1
+                      }
+                      ensure_repo() {
+                        key=$1
+                        payload=$2
+                        status=$(curl --silent --show-error \
+                          --user "$JFROG_USERNAME:$JFROG_PASSWORD" \
+                          --output body.txt --write-out '%{http_code}' \
+                          "$artifactory/api/repositories/$key")
+                        case "$status" in
+                          200) return ;;
+                          400|404) ;;
+                          *) echo "Could not inspect Artifactory repository $key: HTTP $status" >&2; cat body.txt >&2; exit 1 ;;
+                        esac
+                        create_status=$(curl --silent --show-error \
+                          --user "$JFROG_USERNAME:$JFROG_PASSWORD" \
+                          --request PUT --header 'Content-Type: application/json' \
+                          --data "$payload" --output body.txt --write-out '%{http_code}' \
+                          "$artifactory/api/repositories/$key")
+                        case "$create_status" in
+                          200|201) return ;;
+                        esac
+                        reprobe_status=$(curl --silent --show-error \
+                          --user "$JFROG_USERNAME:$JFROG_PASSWORD" \
+                          --output reprobe-body.txt --write-out '%{http_code}' \
+                          "$artifactory/api/repositories/$key")
+                        if [ "$reprobe_status" != 200 ]; then
+                          echo "Could not create Artifactory repository $key: probe HTTP $status, create HTTP $create_status, re-probe HTTP $reprobe_status" >&2
+                          cat body.txt >&2
+                          cat reprobe-body.txt >&2
+                          exit 1
+                        fi
+                      }
+                      ensure_repo "$MAVEN_RELEASE_REPO" \
+                        '{"rclass":"local","packageType":"maven","repoLayoutRef":"maven-2-default","handleReleases":true,"handleSnapshots":false}'
+                      ensure_repo "$MAVEN_SNAPSHOT_REPO" \
+                        '{"rclass":"local","packageType":"maven","repoLayoutRef":"maven-2-default","handleReleases":false,"handleSnapshots":true}'
+                      ensure_repo "$GENERIC_REPO" \
+                        '{"rclass":"local","packageType":"generic"}'
+    - parallel:
+        - stage:
+            name: Qualify LTSC 2019
+            identifier: qualify_ltsc2019
+            type: CI
+            spec:
+              cloneCodebase: false
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: gcopdmwindowsbuildfarm
+                  namespace: <+pipeline.variables.namespace>
+                  os: Windows
+                  automountServiceAccountToken: true
+                  serviceAccountName: ci-image-e2e-reader
+                  nodeSelector:
+                    kubernetes.io/os: windows
+                    node.kubernetes.io/windows-build: "10.0.17763"
+                  tolerations:
+                    - {effect: NoSchedule, key: node.kubernetes.io/os, operator: Equal, value: windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Contract identity and negative paths
+                      identifier: contract_identity_negative
+                      timeout: 20m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        shell: Pwsh
+                        resources: {limits: {memory: 2Gi}}
+                        envVariables:
+                          POD_NAMESPACE: <+pipeline.variables.namespace>
+                          CANDIDATE_IMAGE: <+pipeline.variables.windows2019Candidate>
+                          EXPECTED_WINDOWS_BUILD: "17763"
+                          LTSC: "2019"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                          JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                          MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                          MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                          GENERIC_REPO: <+pipeline.variables.genericRepo>
+                        command: <+pipeline.variables.qualificationScript>
+                  - step:
+                      type: Plugin
+                      name: Maven deploy and build-info
+                      identifier: maven_deploy_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          build_tool: mvn
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          project_dir: project dir with spaces
+                          pom_file: pom.xml
+                          deploy_release_repo: <+pipeline.variables.mavenReleaseRepo>
+                          deploy_snapshot_repo: <+pipeline.variables.mavenSnapshotRepo>
+                          build_name: artifactory-qualification-maven-ltsc2019
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Gradle publish and build-info
+                      identifier: gradle_publish_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          build_tool: gradle
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          project_dir: project dir with spaces
+                          build_file: build.gradle
+                          repo_deploy: <+pipeline.variables.mavenReleaseRepo>
+                          repo_resolve: <+pipeline.variables.mavenReleaseRepo>
+                          build_name: artifactory-qualification-gradle-ltsc2019
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Plugin generic upload and build-info
+                      identifier: plugin_generic_upload_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogPassword>
+                          source: generic/files with spaces/*
+                          target: <+pipeline.variables.genericRepo>/ltsc2019/<+pipeline.sequenceId>/plugin/
+                          build_name: artifactory-qualification-generic-ltsc2019
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: ArtifactoryUpload
+                      name: Native generic upload
+                      identifier: native_generic_upload
+                      spec:
+                        connectorRef: <+pipeline.variables.artifactoryConnector>
+                        sourcePath: generic/files with spaces
+                        target: <+pipeline.variables.genericRepo>/ltsc2019/<+pipeline.sequenceId>/native/
+                  - step:
+                      type: Plugin
+                      name: Generic glob download
+                      identifier: generic_glob_download
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          command: download
+                          build_tool: mvn
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          source: <+pipeline.variables.genericRepo>/ltsc2019/<+pipeline.sequenceId>/native/**
+                          target: downloads/direct/files with spaces/
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Generic spec download
+                      identifier: generic_spec_download
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        settings:
+                          command: download
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          spec: |-
+                            {"files":[{"pattern":"<+pipeline.variables.genericRepo>/ltsc2019/<+pipeline.sequenceId>/native/**","target":"downloads/spec/"}]}
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Run
+                      name: Verify downloaded artifacts
+                      identifier: verify_downloaded_artifacts
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2019Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                          JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          LTSC: "2019"
+                        command: |
+                          $ErrorActionPreference = 'Stop'
+                          foreach ($root in @('downloads/direct', 'downloads/spec')) {
+                            if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Missing download directory: $root" }
+                            $files = @(Get-ChildItem -LiteralPath $root -File -Recurse)
+                            if ($files.Count -lt 2) { throw "Expected nested generic artifacts under $root; observed $($files.Count)" }
+                            if (-not ($files.Name -contains 'root artifact.txt')) { throw "Space-containing artifact is absent under $root" }
+                            if (-not ($files.Name -contains 'deep artifact.json')) { throw "Nested glob artifact is absent under $root" }
+                          }
+                          $credentialBytes = [System.Text.Encoding]::UTF8.GetBytes("$($env:JFROG_USERNAME):$($env:JFROG_PASSWORD)")
+                          $headers = @{Authorization = "Basic $([Convert]::ToBase64String($credentialBytes))"}
+                          $artifactory = $env:JFROG_URL.TrimEnd('/')
+                          if (-not $artifactory.EndsWith('/artifactory', [StringComparison]::OrdinalIgnoreCase)) { $artifactory += '/artifactory' }
+                          foreach ($kind in @('maven', 'gradle', 'generic')) {
+                            $name = "artifactory-qualification-$kind-ltsc$($env:LTSC)"
+                            $encodedName = [uri]::EscapeDataString($name)
+                            $build = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri "$artifactory/api/build/$encodedName/$($env:PIPELINE_SEQUENCE_ID)"
+                            if ([int]$build.StatusCode -ne 200) { throw "Build info is absent for $name; HTTP $([int]$build.StatusCode): $($build.Content)" }
+                          }
+    - parallel:
+        - stage:
+            name: Qualify LTSC 2022
+            identifier: qualify_ltsc2022
+            type: CI
+            spec:
+              cloneCodebase: false
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: gcopdmwindowsbuildfarm
+                  namespace: <+pipeline.variables.namespace>
+                  os: Windows
+                  automountServiceAccountToken: true
+                  serviceAccountName: ci-image-e2e-reader
+                  nodeSelector:
+                    kubernetes.io/os: windows
+                    node.kubernetes.io/windows-build: "10.0.20348"
+                  tolerations:
+                    - {effect: NoSchedule, key: node.kubernetes.io/os, operator: Equal, value: windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Contract identity and negative paths
+                      identifier: contract_identity_negative
+                      timeout: 20m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        shell: Pwsh
+                        resources: {limits: {memory: 2Gi}}
+                        envVariables:
+                          POD_NAMESPACE: <+pipeline.variables.namespace>
+                          CANDIDATE_IMAGE: <+pipeline.variables.windows2022Candidate>
+                          EXPECTED_WINDOWS_BUILD: "20348"
+                          LTSC: "2022"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                          JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                          MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                          MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                          GENERIC_REPO: <+pipeline.variables.genericRepo>
+                        command: <+pipeline.variables.qualificationScript>
+                  - step:
+                      type: Plugin
+                      name: Maven deploy and build-info
+                      identifier: maven_deploy_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          build_tool: mvn
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          project_dir: project dir with spaces
+                          pom_file: pom.xml
+                          deploy_release_repo: <+pipeline.variables.mavenReleaseRepo>
+                          deploy_snapshot_repo: <+pipeline.variables.mavenSnapshotRepo>
+                          build_name: artifactory-qualification-maven-ltsc2022
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Gradle publish and build-info
+                      identifier: gradle_publish_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          build_tool: gradle
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          project_dir: project dir with spaces
+                          build_file: build.gradle
+                          repo_deploy: <+pipeline.variables.mavenReleaseRepo>
+                          repo_resolve: <+pipeline.variables.mavenReleaseRepo>
+                          build_name: artifactory-qualification-gradle-ltsc2022
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Plugin generic upload and build-info
+                      identifier: plugin_generic_upload_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogPassword>
+                          source: generic/files with spaces/*
+                          target: <+pipeline.variables.genericRepo>/ltsc2022/<+pipeline.sequenceId>/plugin/
+                          build_name: artifactory-qualification-generic-ltsc2022
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: ArtifactoryUpload
+                      name: Native generic upload
+                      identifier: native_generic_upload
+                      spec:
+                        connectorRef: <+pipeline.variables.artifactoryConnector>
+                        sourcePath: generic/files with spaces
+                        target: <+pipeline.variables.genericRepo>/ltsc2022/<+pipeline.sequenceId>/native/
+                  - step:
+                      type: Plugin
+                      name: Generic glob download
+                      identifier: generic_glob_download
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          command: download
+                          build_tool: mvn
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          source: <+pipeline.variables.genericRepo>/ltsc2022/<+pipeline.sequenceId>/native/**
+                          target: downloads/direct/files with spaces/
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Generic spec download
+                      identifier: generic_spec_download
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        settings:
+                          command: download
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          spec: |-
+                            {"files":[{"pattern":"<+pipeline.variables.genericRepo>/ltsc2022/<+pipeline.sequenceId>/native/**","target":"downloads/spec/"}]}
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Run
+                      name: Verify downloaded artifacts
+                      identifier: verify_downloaded_artifacts
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2022Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                          JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          LTSC: "2022"
+                        command: |
+                          $ErrorActionPreference = 'Stop'
+                          foreach ($root in @('downloads/direct', 'downloads/spec')) {
+                            if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Missing download directory: $root" }
+                            $files = @(Get-ChildItem -LiteralPath $root -File -Recurse)
+                            if ($files.Count -lt 2) { throw "Expected nested generic artifacts under $root; observed $($files.Count)" }
+                            if (-not ($files.Name -contains 'root artifact.txt')) { throw "Space-containing artifact is absent under $root" }
+                            if (-not ($files.Name -contains 'deep artifact.json')) { throw "Nested glob artifact is absent under $root" }
+                          }
+                          $credentialBytes = [System.Text.Encoding]::UTF8.GetBytes("$($env:JFROG_USERNAME):$($env:JFROG_PASSWORD)")
+                          $headers = @{Authorization = "Basic $([Convert]::ToBase64String($credentialBytes))"}
+                          $artifactory = $env:JFROG_URL.TrimEnd('/')
+                          if (-not $artifactory.EndsWith('/artifactory', [StringComparison]::OrdinalIgnoreCase)) { $artifactory += '/artifactory' }
+                          foreach ($kind in @('maven', 'gradle', 'generic')) {
+                            $name = "artifactory-qualification-$kind-ltsc$($env:LTSC)"
+                            $encodedName = [uri]::EscapeDataString($name)
+                            $build = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri "$artifactory/api/build/$encodedName/$($env:PIPELINE_SEQUENCE_ID)"
+                            if ([int]$build.StatusCode -ne 200) { throw "Build info is absent for $name; HTTP $([int]$build.StatusCode): $($build.Content)" }
+                          }
+        - stage:
+            name: Qualify LTSC 2025
+            identifier: qualify_ltsc2025
+            type: CI
+            spec:
+              cloneCodebase: false
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: gcopdmwindows2025
+                  namespace: <+pipeline.variables.namespace>
+                  os: Windows
+                  automountServiceAccountToken: true
+                  serviceAccountName: ci-image-e2e-reader
+                  nodeSelector:
+                    kubernetes.io/os: windows
+                    node.kubernetes.io/windows-build: "10.0.26100"
+                  tolerations:
+                    - {effect: NoSchedule, key: node.kubernetes.io/os, operator: Equal, value: windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Contract identity and negative paths
+                      identifier: contract_identity_negative
+                      timeout: 20m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        shell: Pwsh
+                        resources: {limits: {memory: 2Gi}}
+                        envVariables:
+                          POD_NAMESPACE: <+pipeline.variables.namespace>
+                          CANDIDATE_IMAGE: <+pipeline.variables.windows2025Candidate>
+                          EXPECTED_WINDOWS_BUILD: "26100"
+                          LTSC: "2025"
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                          JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                          MAVEN_RELEASE_REPO: <+pipeline.variables.mavenReleaseRepo>
+                          MAVEN_SNAPSHOT_REPO: <+pipeline.variables.mavenSnapshotRepo>
+                          GENERIC_REPO: <+pipeline.variables.genericRepo>
+                        command: <+pipeline.variables.qualificationScript>
+                  - step:
+                      type: Plugin
+                      name: Maven deploy and build-info
+                      identifier: maven_deploy_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          build_tool: mvn
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          project_dir: project dir with spaces
+                          pom_file: pom.xml
+                          deploy_release_repo: <+pipeline.variables.mavenReleaseRepo>
+                          deploy_snapshot_repo: <+pipeline.variables.mavenSnapshotRepo>
+                          build_name: artifactory-qualification-maven-ltsc2025
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Gradle publish and build-info
+                      identifier: gradle_publish_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          build_tool: gradle
+                          command: publish
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          project_dir: project dir with spaces
+                          build_file: build.gradle
+                          repo_deploy: <+pipeline.variables.mavenReleaseRepo>
+                          repo_resolve: <+pipeline.variables.mavenReleaseRepo>
+                          build_name: artifactory-qualification-gradle-ltsc2025
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Plugin generic upload and build-info
+                      identifier: plugin_generic_upload_build_info
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          url: <+pipeline.variables.jfrogUrl>
+                          access_token: <+pipeline.variables.jfrogPassword>
+                          source: generic/files with spaces/*
+                          target: <+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/plugin/
+                          build_name: artifactory-qualification-generic-ltsc2025
+                          build_number: <+pipeline.sequenceId>
+                          publish_build_info: true
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: ArtifactoryUpload
+                      name: Native generic upload
+                      identifier: native_generic_upload
+                      spec:
+                        connectorRef: <+pipeline.variables.artifactoryConnector>
+                        sourcePath: generic/files with spaces
+                        target: <+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/native/
+                  - step:
+                      type: Plugin
+                      name: Generic glob download
+                      identifier: generic_glob_download
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          command: download
+                          build_tool: mvn
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          source: <+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/native/**
+                          target: downloads/direct/files with spaces/
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Plugin
+                      name: Generic spec download
+                      identifier: generic_spec_download
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        settings:
+                          command: download
+                          url: <+pipeline.variables.jfrogUrl>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
+                          spec: |-
+                            {"files":[{"pattern":"<+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/native/**","target":"downloads/spec/"}]}
+                          enable_proxy: true
+                        envVariables:
+                          HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
+                          HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                  - step:
+                      type: Run
+                      name: Verify downloaded artifacts
+                      identifier: verify_downloaded_artifacts
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: <+pipeline.variables.windows2025Candidate>
+                        shell: Pwsh
+                        envVariables:
+                          JFROG_URL: <+pipeline.variables.jfrogUrl>
+                          JFROG_USERNAME: <+pipeline.variables.jfrogUsername>
+                          JFROG_PASSWORD: <+pipeline.variables.jfrogPassword>
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                          LTSC: "2025"
+                        command: |
+                          $ErrorActionPreference = 'Stop'
+                          foreach ($root in @('downloads/direct', 'downloads/spec')) {
+                            if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Missing download directory: $root" }
+                            $files = @(Get-ChildItem -LiteralPath $root -File -Recurse)
+                            if ($files.Count -lt 2) { throw "Expected nested generic artifacts under $root; observed $($files.Count)" }
+                            if (-not ($files.Name -contains 'root artifact.txt')) { throw "Space-containing artifact is absent under $root" }
+                            if (-not ($files.Name -contains 'deep artifact.json')) { throw "Nested glob artifact is absent under $root" }
+                          }
+                          $credentialBytes = [System.Text.Encoding]::UTF8.GetBytes("$($env:JFROG_USERNAME):$($env:JFROG_PASSWORD)")
+                          $headers = @{Authorization = "Basic $([Convert]::ToBase64String($credentialBytes))"}
+                          $artifactory = $env:JFROG_URL.TrimEnd('/')
+                          if (-not $artifactory.EndsWith('/artifactory', [StringComparison]::OrdinalIgnoreCase)) { $artifactory += '/artifactory' }
+                          foreach ($kind in @('maven', 'gradle', 'generic')) {
+                            $name = "artifactory-qualification-$kind-ltsc$($env:LTSC)"
+                            $encodedName = [uri]::EscapeDataString($name)
+                            $build = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Headers $headers -Uri "$artifactory/api/build/$encodedName/$($env:PIPELINE_SEQUENCE_ID)"
+                            if ([int]$build.StatusCode -ne 200) { throw "Build info is absent for $name; HTTP $([int]$build.StatusCode): $($build.Content)" }
+                          }
