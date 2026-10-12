@@ -375,7 +375,8 @@ pipeline:
                         image: <+pipeline.variables.windows2019Candidate>
                         settings:
                           url: <+pipeline.variables.jfrogUrl>
-                          access_token: <+pipeline.variables.jfrogPassword>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
                           source: generic/files with spaces/*
                           target: <+pipeline.variables.genericRepo>/ltsc2019/<+pipeline.sequenceId>/plugin/
                           build_name: artifactory-qualification-generic-ltsc2019
@@ -566,7 +567,8 @@ pipeline:
                         image: <+pipeline.variables.windows2022Candidate>
                         settings:
                           url: <+pipeline.variables.jfrogUrl>
-                          access_token: <+pipeline.variables.jfrogPassword>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
                           source: generic/files with spaces/*
                           target: <+pipeline.variables.genericRepo>/ltsc2022/<+pipeline.sequenceId>/plugin/
                           build_name: artifactory-qualification-generic-ltsc2022
@@ -756,7 +758,8 @@ pipeline:
                         image: <+pipeline.variables.windows2025Candidate>
                         settings:
                           url: <+pipeline.variables.jfrogUrl>
-                          access_token: <+pipeline.variables.jfrogPassword>
+                          username: <+pipeline.variables.jfrogUsername>
+                          password: <+pipeline.variables.jfrogPassword>
                           source: generic/files with spaces/*
                           target: <+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/plugin/
                           build_name: artifactory-qualification-generic-ltsc2025
