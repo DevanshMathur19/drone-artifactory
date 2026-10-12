@@ -1,0 +1,310 @@
+pipeline:
+  name: Artifactory Plugin - Publish Node Candidate Matrix-dm
+  identifier: artifactory_plugin_publish_node_matrix_dm
+  projectIdentifier: Drone_Plugins
+  orgIdentifier: default
+  properties:
+    ci:
+      codebase:
+        connectorRef: rpgithub
+        repoName: DevanshMathur19/drone-artifactory
+        build: <+input>
+  variables:
+    - {name: dockerConnector, type: String, value: dmdockerconn}
+    - {name: windows2019BuilderPool, type: String, value: windows-2019}
+    - {name: windows2025BuilderPool, type: String, value: windows-2025}
+    - {name: expectedCommitSha, type: String, value: 7e1e9a9b88b76fa477b74219ca6351e331a6587c}
+    - {name: publishLinux, type: String, value: "true"}
+    - {name: publishWindows, type: String, value: "true"}
+    - {name: goWindowsUrl, type: String, value: "https://go.dev/dl/go1.25.13.windows-amd64.zip"}
+    - {name: goWindowsSha256, type: String, value: "54a6bbffada82938ac4ae66e354b2e9c04ebdceff96f8d0455406c723b5ed1fc"}
+  stages:
+    - parallel:
+        - stage:
+            name: Publish Node profiles Linux AMD64
+            identifier: publish_node_profiles_linux_amd64
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.publishLinux> == "true"
+            spec:
+              cloneCodebase: true
+              slsa_provenance: {enabled: true}
+              platform: {os: Linux, arch: Amd64}
+              runtime: {type: Cloud, spec: {}}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: golang:1.25.13-alpine
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          go test ./...
+                          mkdir -p release/linux/amd64
+                          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=1.9.6 -X main.build=<+pipeline.sequenceId>' -o release/linux/amd64/plugin .
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 18 Linux AMD64
+                      identifier: publish_node18_linux_amd64
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-linux-node18-amd64-r1], dockerfile: docker/Dockerfile.linux.node18.amd64, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 22 Linux AMD64
+                      identifier: publish_node22_linux_amd64
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-linux-node22-amd64-r1], dockerfile: docker/Dockerfile.linux.node22.amd64, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 24 Linux AMD64
+                      identifier: publish_node24_linux_amd64
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-linux-node24-amd64-r1], dockerfile: docker/Dockerfile.linux.node24.amd64, context: ., caching: false}
+        - stage:
+            name: Publish Node profiles Linux ARM64
+            identifier: publish_node_profiles_linux_arm64
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.publishLinux> == "true"
+            spec:
+              cloneCodebase: true
+              slsa_provenance: {enabled: true}
+              platform: {os: Linux, arch: Arm64}
+              runtime: {type: Cloud, spec: {}}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: golang:1.25.13-alpine
+                        shell: Sh
+                        command: |
+                          set -eu
+                          test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
+                          go test ./...
+                          mkdir -p release/linux/arm64
+                          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=1.9.6 -X main.build=<+pipeline.sequenceId>' -o release/linux/arm64/plugin .
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 18 Linux ARM64
+                      identifier: publish_node18_linux_arm64
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-linux-node18-arm64-r1], dockerfile: docker/Dockerfile.linux.node18.arm64, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 22 Linux ARM64
+                      identifier: publish_node22_linux_arm64
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-linux-node22-arm64-r1], dockerfile: docker/Dockerfile.linux.node22.arm64, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 24 Linux ARM64
+                      identifier: publish_node24_linux_arm64
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-linux-node24-arm64-r1], dockerfile: docker/Dockerfile.linux.node24.arm64, context: ., caching: false}
+        - stage:
+            name: Publish Node profiles LTSC 2019
+            identifier: publish_node_profiles_ltsc2019
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.publishWindows> == "true"
+            spec:
+              cloneCodebase: true
+              slsa_provenance: {enabled: true}
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: VM
+                spec:
+                  type: Pool
+                  spec: {poolName: <+pipeline.variables.windows2019BuilderPool>, os: Windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      timeout: 60m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: mcr.microsoft.com/windows/servercore@sha256:bea74690d808bba3e6b0d4ba4c599305aea1f66c875f133f1e75855841dcb1d5
+                        shell: Powershell
+                        command: |
+                          $ErrorActionPreference = 'Stop'
+                          $revision = '<+codebase.commitSha>'
+                          if ($revision -ne '<+pipeline.variables.expectedCommitSha>') {
+                            throw "Expected audited plugin revision <+pipeline.variables.expectedCommitSha>, got $revision"
+                          }
+                          $actual = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuild
+                          if ($actual -ne '17763') { throw "Expected Windows build 17763, got $actual" }
+                          Invoke-WebRequest -UseBasicParsing -Uri '<+pipeline.variables.goWindowsUrl>' -OutFile go.zip
+                          if ((Get-FileHash -Algorithm SHA256 go.zip).Hash.ToLowerInvariant() -ne '<+pipeline.variables.goWindowsSha256>') { throw 'Go SDK SHA-256 mismatch' }
+                          Expand-Archive go.zip -DestinationPath C:\tools -Force
+                          & C:\tools\go\bin\go.exe test ./...
+                          if ($LASTEXITCODE -ne 0) { throw "go test failed with exit code $LASTEXITCODE" }
+                          New-Item -ItemType Directory -Force release\windows\amd64 | Out-Null
+                          $env:CGO_ENABLED='0'; $env:GOOS='windows'; $env:GOARCH='amd64'
+                          & C:\tools\go\bin\go.exe build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=1.9.6 -X main.build=<+pipeline.sequenceId>' -o release\windows\amd64\plugin .
+                          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 18 LTSC 2019
+                      identifier: publish_node18_ltsc2019
+                      timeout: 60m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        repo: devanshmathur19/drone-artifactory
+                        tags: [1.9.6-npm-windows-node18-nano-ltsc2019-amd64-r1]
+                        dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2019
+                        context: .
+                        caching: false
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 22 LTSC 2019
+                      identifier: publish_node22_ltsc2019
+                      timeout: 60m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        repo: devanshmathur19/drone-artifactory
+                        tags: [1.9.6-npm-windows-node22-nano-ltsc2019-amd64-r1]
+                        dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2019
+                        context: .
+                        caching: false
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 24 LTSC 2019
+                      identifier: publish_node24_ltsc2019
+                      timeout: 60m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        repo: devanshmathur19/drone-artifactory
+                        tags: [1.9.6-npm-windows-node24-nano-ltsc2019-amd64-r1]
+                        dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2019
+                        context: .
+                        caching: false
+            delegateSelectors: [windows-vm]
+        - stage:
+            name: Publish Node profiles LTSC 2022
+            identifier: publish_node_profiles_ltsc2022
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.publishWindows> == "true"
+            spec:
+              cloneCodebase: true
+              slsa_provenance: {enabled: true}
+              platform: {os: Windows, arch: Amd64}
+              runtime: {type: Cloud, spec: {}}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      timeout: 60m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: mcr.microsoft.com/windows/servercore@sha256:e10503b9a4f7faafa30aa0f5d0e8e7f7ca30a4496b3b87d61178b4d7c6815fb5
+                        shell: Powershell
+                        command: |
+                          $ErrorActionPreference = 'Stop'
+                          $revision = '<+codebase.commitSha>'
+                          if ($revision -ne '<+pipeline.variables.expectedCommitSha>') {
+                            throw "Expected audited plugin revision <+pipeline.variables.expectedCommitSha>, got $revision"
+                          }
+                          $actual = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuild
+                          if ($actual -ne '20348') { throw "Expected Windows build 20348, got $actual" }
+                          Invoke-WebRequest -UseBasicParsing -Uri '<+pipeline.variables.goWindowsUrl>' -OutFile go.zip
+                          if ((Get-FileHash -Algorithm SHA256 go.zip).Hash.ToLowerInvariant() -ne '<+pipeline.variables.goWindowsSha256>') { throw 'Go SDK SHA-256 mismatch' }
+                          Expand-Archive go.zip -DestinationPath C:\tools -Force
+                          & C:\tools\go\bin\go.exe test ./...
+                          if ($LASTEXITCODE -ne 0) { throw "go test failed with exit code $LASTEXITCODE" }
+                          New-Item -ItemType Directory -Force release\windows\amd64 | Out-Null
+                          $env:CGO_ENABLED='0'; $env:GOOS='windows'; $env:GOARCH='amd64'
+                          & C:\tools\go\bin\go.exe build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=1.9.6 -X main.build=<+pipeline.sequenceId>' -o release\windows\amd64\plugin .
+                          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 18 LTSC 2022
+                      identifier: publish_node18_ltsc2022
+                      timeout: 60m
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-windows-node18-nano-ltsc2022-amd64-r1], dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2022, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 22 LTSC 2022
+                      identifier: publish_node22_ltsc2022
+                      timeout: 60m
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-windows-node22-nano-ltsc2022-amd64-r1], dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2022, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 24 LTSC 2022
+                      identifier: publish_node24_ltsc2022
+                      timeout: 60m
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-windows-node24-nano-ltsc2022-amd64-r1], dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2022, context: ., caching: false}
+        - stage:
+            name: Publish Node profiles LTSC 2025
+            identifier: publish_node_profiles_ltsc2025
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.publishWindows> == "true"
+            spec:
+              cloneCodebase: true
+              slsa_provenance: {enabled: true}
+              platform: {os: Windows, arch: Amd64}
+              infrastructure:
+                type: VM
+                spec:
+                  type: Pool
+                  spec: {poolName: <+pipeline.variables.windows2025BuilderPool>, os: Windows}
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Build verified plugin binary
+                      identifier: build_verified_plugin_binary
+                      timeout: 60m
+                      spec:
+                        connectorRef: <+pipeline.variables.dockerConnector>
+                        image: mcr.microsoft.com/windows/servercore@sha256:22505496dd4229dba63453ba0c6dc31c06fd3e11810e5b8e429aa6b16dab2457
+                        shell: Powershell
+                        command: |
+                          $ErrorActionPreference = 'Stop'
+                          $revision = '<+codebase.commitSha>'
+                          if ($revision -ne '<+pipeline.variables.expectedCommitSha>') {
+                            throw "Expected audited plugin revision <+pipeline.variables.expectedCommitSha>, got $revision"
+                          }
+                          $actual = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuild
+                          if ($actual -ne '26100') { throw "Expected Windows build 26100, got $actual" }
+                          Invoke-WebRequest -UseBasicParsing -Uri '<+pipeline.variables.goWindowsUrl>' -OutFile go.zip
+                          if ((Get-FileHash -Algorithm SHA256 go.zip).Hash.ToLowerInvariant() -ne '<+pipeline.variables.goWindowsSha256>') { throw 'Go SDK SHA-256 mismatch' }
+                          Expand-Archive go.zip -DestinationPath C:\tools -Force
+                          & C:\tools\go\bin\go.exe test ./...
+                          if ($LASTEXITCODE -ne 0) { throw "go test failed with exit code $LASTEXITCODE" }
+                          New-Item -ItemType Directory -Force release\windows\amd64 | Out-Null
+                          $env:CGO_ENABLED='0'; $env:GOOS='windows'; $env:GOARCH='amd64'
+                          & C:\tools\go\bin\go.exe build -trimpath -buildvcs=false -ldflags '-s -w -X main.version=1.9.6 -X main.build=<+pipeline.sequenceId>' -o release\windows\amd64\plugin .
+                          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 18 LTSC 2025
+                      identifier: publish_node18_ltsc2025
+                      timeout: 60m
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-windows-node18-nano-ltsc2025-amd64-r1], dockerfile: docker/Dockerfile.windows.node18.amd64.ltsc2025, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 22 LTSC 2025
+                      identifier: publish_node22_ltsc2025
+                      timeout: 60m
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-windows-node22-nano-ltsc2025-amd64-r1], dockerfile: docker/Dockerfile.windows.node22.amd64.ltsc2025, context: ., caching: false}
+                  - step:
+                      type: BuildAndPushDockerRegistry
+                      name: Publish Node 24 LTSC 2025
+                      identifier: publish_node24_ltsc2025
+                      timeout: 60m
+                      spec: {connectorRef: <+pipeline.variables.dockerConnector>, repo: devanshmathur19/drone-artifactory, tags: [1.9.6-npm-windows-node24-nano-ltsc2025-amd64-r1], dockerfile: docker/Dockerfile.windows.node24.amd64.ltsc2025, context: ., caching: false}
+            delegateSelectors: [windows-vm]
