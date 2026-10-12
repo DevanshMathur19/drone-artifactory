@@ -1,13 +1,13 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -24,13 +24,19 @@ const (
 	tmpServerId  = "tmpServerId"
 )
 
-func HandleRtCommands(args Args) error {
+func HandleRtCommands(ctx context.Context, args Args) error {
+	artifactoryURL, err := normalizeArtifactoryURL(args.URL)
+	if err != nil {
+		return err
+	}
+	args.URL = artifactoryURL
 
 	commandsList, err := GetRtCommandsList(args)
 	if err != nil {
 		logrus.Println("Error Unable to get rt commands list err = ", err)
 		return err
 	}
+	defer cleanupTemporarySpecs(commandsList)
 
 	err = WriteKnownGoodServerCertsForTls(args)
 	if err != nil {
@@ -38,170 +44,165 @@ func HandleRtCommands(args Args) error {
 		return err
 	}
 
-	for _, cmd := range commandsList {
+	for index, cmd := range commandsList {
 		execArgs := []string{getJfrogBin()}
 		execArgs = append(execArgs, cmd...)
-		err := ExecCommand(args, execArgs)
+		logrus.Printf("Running Artifactory command %d/%d: %s", index+1, len(commandsList), commandLabel(execArgs))
+		err := ExecCommand(ctx, args, execArgs)
 		if err != nil {
 			logrus.Println("Error Unable to run err = ", err)
 			return err
 		}
 	}
 
-	return err
-}
-
-func WriteKnownGoodServerCertsForTls(args Args) error {
-
-	insecure := parseBoolOrDefault(false, args.Insecure)
-	if insecure {
-		return nil
-	}
-
-	// create pem file
-	if args.PEMFileContents != "" {
-		var path string
-		// figure out path to write pem file
-		if args.PEMFilePath == "" {
-			if runtime.GOOS == "windows" {
-				path = "C:/users/ContainerAdministrator/.jfrog/security/certs/cert.pem"
-			} else {
-				path = "/root/.jfrog/security/certs/cert.pem"
-			}
-		} else {
-			path = args.PEMFilePath
-		}
-		logrus.Printf("Creating pem file at %q\n", path)
-		// write pen contents to path
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			// remove filename from path
-			dir := filepath.Dir(path)
-			pemFolderErr := os.MkdirAll(dir, 0700)
-			if pemFolderErr != nil {
-				return fmt.Errorf("error creating pem folder: %s", pemFolderErr)
-			}
-			// write pem contents
-			pemWriteErr := os.WriteFile(path, []byte(args.PEMFileContents), 0600)
-			if pemWriteErr != nil {
-				return fmt.Errorf("error writing pem file: %s", pemWriteErr)
-			}
-			logrus.Printf("Successfully created pem file at %q\n", path)
-		}
-	}
-	return nil
-}
-
-func GetRtCommandsList(args Args) ([][]string, error) {
-	logrus.Println("Handling rt command handleRtCommand")
-	commandsList := [][]string{}
-	var err error
-
-	logrus.Println("Checking GetRtCommandsList args.Command ", args.Command)
-
-	if args.BuildTool == MvnCmd && (args.Command == "" || args.Command == "build") {
-		logrus.Println("mvn build start")
-		commandsList, err = GetMavenBuildCommandArgs(args)
-	}
-
-	if args.BuildTool == MvnCmd && args.Command == "publish" {
-		commandsList, err = GetMavenPublishCommand(args)
-	}
-
-	if args.BuildTool == GradleCmd && (args.Command == "" || args.Command == "build") {
-		logrus.Println("Gradle build start")
-		commandsList, err = GetGradleCommandArgs(args)
-	}
-
-	if args.BuildTool == GradleCmd && args.Command == "publish" {
-		logrus.Println("Gradle publish start")
-		commandsList, err = GetGradlePublishCommand(args)
-	}
-
-	if args.Command == "download" {
-		logrus.Println("download start")
-		commandsList, err = GetDownloadCommandArgs(args)
-	}
-
-	if args.Command == "cleanup" {
-		logrus.Println("cleanup start")
-		commandsList, err = GetCleanupCommandArgs(args)
-	}
-
-	if args.Command == "scan" {
-		logrus.Println("scan start")
-		commandsList, err = GetScanCommandArgs(args)
-	}
-
-	if args.Command == "publish-build-info" {
-		logrus.Println("publish-build-info start")
-		commandsList, err = GetBuildInfoPublishCommandArgs(args)
-	}
-
-	if args.Command == "promote" {
-		logrus.Println("promote start")
-		commandsList, err = GetPromoteCommandArgs(args)
-	}
-
-	if args.Command == "add-build-dependencies" {
-		logrus.Println("add-build-dependencies start")
-		commandsList, err = GetAddDependenciesCommandArgs(args)
-	}
-
-	// command "build-discard" Used only by standalone step of build-discard
-	if args.Command == "build-discard" {
-		logrus.Println("build-discard start")
-		commandsList, err = GetBuildDiscardCommandArgs(args)
-	}
-	return commandsList, err
-}
-
-func GetShellForOs(osName string) (string, string) {
-
-	if runtime.GOOS == "windows" {
-		// First check for PowerShell Core (pwsh.exe) which is used in PowerShell Nanoserver
-		if _, err := os.Stat("C:/Program Files/PowerShell/pwsh.exe"); err == nil {
-			return "pwsh", "-Command"
-		}
-
-		// Fall back to traditional PowerShell
-		return "powershell", "-Command"
-	}
-
-	return "sh", "-c"
-}
-
-func ExecCommand(args Args, cmdArgs []string) error {
-
-	cmdStr := strings.Join(cmdArgs[:], " ")
-
-	shell, shArg := GetShellForOs(runtime.GOOS)
-
-	logrus.Println()
-	logrus.Printf("%s %s %s", shell, shArg, cmdStr)
-	logrus.Println()
-
-	cmd := exec.Command(shell, shArg, cmdStr)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "JFROG_CLI_OFFER_CONFIG=false", "JFROG_CLI_AVOID_NEW_VERSION_WARNING=true")
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	trace(cmd)
-
-	err := cmd.Run()
-	if err != nil {
-		logrus.Println(" Error: ", err)
-		return err
-	}
-
-	if args.PublishBuildInfo {
-		if err := publishBuildInfo(args); err != nil {
+	if (args.PublishBuildInfo || args.Command == Publish) && args.Command != "publish-build-info" {
+		if err := publishBuildInfo(ctx, args); err != nil {
 			logrus.Println("Error publishing build info: ", err)
 			return err
 		}
 	}
 
 	return nil
+}
+
+func WriteKnownGoodServerCertsForTls(args Args) error {
+	insecure := parseBoolOrDefault(false, args.Insecure)
+	if insecure || args.PEMFileContents == "" {
+		return nil
+	}
+
+	path := args.PEMFilePath
+	if path == "" {
+		if runtime.GOOS == "windows" {
+			path = "C:/users/ContainerAdministrator/.jfrog/security/certs/cert.pem"
+		} else {
+			path = "/root/.jfrog/security/certs/cert.pem"
+		}
+	}
+	logrus.Printf("Writing pem file at %q\n", path)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("error creating pem folder: %w", err)
+	}
+	temp, err := os.CreateTemp(dir, ".cert-*.tmp")
+	if err != nil {
+		return fmt.Errorf("error creating temporary pem file: %w", err)
+	}
+	tempName := temp.Name()
+	defer os.Remove(tempName)
+	if err := temp.Chmod(0600); err != nil {
+		temp.Close()
+		return fmt.Errorf("error setting pem permissions: %w", err)
+	}
+	if _, err := temp.WriteString(args.PEMFileContents); err != nil {
+		temp.Close()
+		return fmt.Errorf("error writing pem file: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("error closing pem file: %w", err)
+	}
+	// Windows Rename does not replace an existing destination. Remove it only
+	// after the complete replacement has been written and closed.
+	if runtime.GOOS == "windows" {
+		_ = os.Remove(path)
+	}
+	if err := os.Rename(tempName, path); err != nil {
+		return fmt.Errorf("error replacing pem file: %w", err)
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		return fmt.Errorf("error securing pem file: %w", err)
+	}
+	logrus.Printf("Successfully wrote pem file at %q\n", path)
+	return nil
+}
+
+func GetRtCommandsList(args Args) ([][]string, error) {
+	logrus.Println("Handling rt command handleRtCommand")
+	logrus.Println("Checking GetRtCommandsList args.Command ", args.Command)
+
+	var (
+		commandsList [][]string
+		err          error
+	)
+	switch args.Command {
+	case "download":
+		logIgnoredBuildTool(args)
+		logrus.Println("download start")
+		commandsList, err = GetDownloadCommandArgs(args)
+	case "cleanup":
+		logIgnoredBuildTool(args)
+		logrus.Println("cleanup start")
+		commandsList, err = GetCleanupCommandArgs(args)
+	case "scan":
+		logIgnoredBuildTool(args)
+		logrus.Println("scan start")
+		commandsList, err = GetScanCommandArgs(args)
+	case "publish-build-info":
+		logIgnoredBuildTool(args)
+		logrus.Println("publish-build-info start")
+		commandsList, err = GetBuildInfoPublishCommandArgs(args)
+	case "promote":
+		logIgnoredBuildTool(args)
+		logrus.Println("promote start")
+		commandsList, err = GetPromoteCommandArgs(args)
+	case "add-build-dependencies":
+		logIgnoredBuildTool(args)
+		logrus.Println("add-build-dependencies start")
+		commandsList, err = GetAddDependenciesCommandArgs(args)
+	case "build-discard":
+		logIgnoredBuildTool(args)
+		logrus.Println("build-discard start")
+		commandsList, err = GetBuildDiscardCommandArgs(args)
+	default:
+		commandsList, err = getBuildToolCommands(args)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(commandsList) == 0 {
+		return nil, fmt.Errorf(
+			"no Artifactory commands generated for build_tool/command combination: %q/%q",
+			args.BuildTool,
+			args.Command,
+		)
+	}
+	return commandsList, nil
+}
+
+func logIgnoredBuildTool(args Args) {
+	if args.BuildTool != "" {
+		logrus.Warnf(
+			"build_tool %q is ignored for standalone command %q; remove it because this compatibility behavior is deprecated",
+			args.BuildTool,
+			args.Command,
+		)
+	}
+}
+
+func getBuildToolCommands(args Args) ([][]string, error) {
+	switch {
+	case args.BuildTool == MvnCmd && (args.Command == "" || args.Command == "build"):
+		logrus.Println("mvn build start")
+		return GetMavenBuildCommandArgs(args)
+	case args.BuildTool == MvnCmd && args.Command == Publish:
+		return GetMavenPublishCommand(args)
+	case args.BuildTool == GradleCmd && (args.Command == "" || args.Command == "build"):
+		logrus.Println("Gradle build start")
+		return GetGradleCommandArgs(args)
+	case args.BuildTool == GradleCmd && args.Command == Publish:
+		logrus.Println("Gradle publish start")
+		return GetGradlePublishCommand(args)
+	default:
+		return nil, fmt.Errorf(
+			"unsupported build_tool/command combination: %q/%q",
+			args.BuildTool,
+			args.Command,
+		)
+	}
+}
+
+func GetShellForOs(osName string) (string, string, error) {
+	return resolveShell(osName, exec.LookPath, os.Stat)
 }
 
 type JsonTagToExeFlagMapStringItem struct {
@@ -326,6 +327,10 @@ func GetConfigAddConfigCommandArgs(srvConfigStr, userName, password, url,
 	if srvConfigStr == "" {
 		srvConfigStr = tmpServerId
 	}
+	platformURL, err := normalizePlatformURL(url)
+	if err != nil {
+		return nil, err
+	}
 
 	authParams, err := setAuthParams([]string{}, Args{Username: userName,
 		Password: password, AccessToken: accessToken, APIKey: apiKey})
@@ -334,7 +339,7 @@ func GetConfigAddConfigCommandArgs(srvConfigStr, userName, password, url,
 		return []string{""}, err
 	}
 
-	cfgCommand := []string{"config", "add", srvConfigStr, "--url=" + url}
+	cfgCommand := []string{"config", "add", srvConfigStr, "--url=" + platformURL}
 	cfgCommand = append(cfgCommand, authParams...)
 	cfgCommand = append(cfgCommand, "--interactive=false")
 	return cfgCommand, nil

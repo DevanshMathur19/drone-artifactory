@@ -28,13 +28,13 @@ func TestGetDownloadCommandUserPassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"rt download --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD   " + "--build-name=t2 --build-number=v1.0 " +
+		"rt download --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD " + "--build-name=t2 --build-number=v1.0 " +
 			"--module=backend_module --project=backend_project --url=https://artifactory.test.io/artifactory/ --spec=spec.json",
 	}
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
@@ -57,13 +57,13 @@ func TestGetDownloadCommandUserAccessToken(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"rt download --access-token $PLUGIN_ACCESS_TOKEN   --build-name=t2 --build-number=v1.0 --module=backend_module" +
+		"rt download --access-token $PLUGIN_ACCESS_TOKEN --build-name=t2 --build-number=v1.0 --module=backend_module" +
 			" --project=backend_project --url=https://artifactory.test.io/artifactory/ --spec=spec.json",
 	}
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}

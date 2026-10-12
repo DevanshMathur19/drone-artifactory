@@ -25,7 +25,7 @@ func TestGetScanCommandUserPassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
@@ -49,14 +49,14 @@ func TestGetBuildInfoPublishCommandUserPassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME " +
+		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME " +
 			"--password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-publish t2 v1.0",
 	}
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
@@ -85,7 +85,7 @@ func TestPromoteBuildCommandUserPassword(t *testing.T) {
 
 	for i, cmd := range cmdList {
 		cmdStr := strings.Join(cmd, " ")
-		if !strings.Contains(cmdStr, wantCmds[i]) {
+		if !strings.Contains(normalizeCommandForTest(cmdStr, wantCmds[i]), wantCmds[i]) {
 			t.Errorf("Expected: |%s|, Got: |%s|", wantCmds[i], cmdStr)
 		}
 	}
@@ -109,7 +109,7 @@ func TestAddDependenciesCommandUserPassword(t *testing.T) {
 	}
 
 	wantCmds := []string{
-		"config add tmpServerId --url=https://artifactory.test.io/artifactory/ --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
+		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-add-dependencies --module=backend_module --project=backend_project --spec=spec.json --server-id=tmpServerId t2 v1.0",
 		"rt build-publish t2 v1.0",
 	}

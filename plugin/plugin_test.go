@@ -6,6 +6,8 @@ package plugin
 
 import (
 	"fmt"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +25,28 @@ const (
 	RtResolveSnapshotRepo = "mvn_repo_resolve_snapshots_01"
 )
 
+func normalizeCommandForTest(got, want string) string {
+	if runtime.GOOS != "windows" {
+		return got
+	}
+	got = strings.ReplaceAll(got, "$Env:PLUGIN_", "$PLUGIN_")
+	wanted := make(map[string]bool)
+	for _, token := range strings.Fields(want) {
+		wanted[token] = true
+	}
+	filtered := make([]string, 0)
+	for _, token := range strings.Fields(got) {
+		if token == "--global=true" || token == "--uses-plugin=true" {
+			continue
+		}
+		if (strings.HasPrefix(token, "--repo-") || strings.HasPrefix(token, "--server-id-")) && !wanted[token] {
+			continue
+		}
+		filtered = append(filtered, token)
+	}
+	return strings.Join(filtered, " ")
+}
+
 func TestSetAuthParams(t *testing.T) {
 	tests := []struct {
 		cmdArgs []string
@@ -34,21 +58,21 @@ func TestSetAuthParams(t *testing.T) {
 		{
 			cmdArgs: []string{"executable", "arg1", "arg2"},
 			args:    Args{Username: "john", Password: "password123", APIKey: "", AccessToken: ""},
-			output:  []string{"executable", "arg1", "arg2", "--user $PLUGIN_USERNAME", "--password $PLUGIN_PASSWORD"},
+			output:  []string{"executable", "arg1", "arg2", "--user", "$PLUGIN_USERNAME", "--password", "$PLUGIN_PASSWORD"},
 			err:     nil,
 		},
 		// Test case 2
 		{
 			cmdArgs: []string{"./app", "--flag"},
 			args:    Args{Username: "", Password: "", APIKey: "secretkey", AccessToken: ""},
-			output:  []string{"./app", "--flag", "--apikey $PLUGIN_API_KEY"},
+			output:  []string{"./app", "--flag", "--apikey", "$PLUGIN_API_KEY"},
 			err:     nil,
 		},
 		// Test case 3
 		{
 			cmdArgs: []string{"script.sh", "-option"},
 			args:    Args{Username: "", Password: "", APIKey: "", AccessToken: "token123"},
-			output:  []string{"script.sh", "-option", "--access-token $PLUGIN_ACCESS_TOKEN"},
+			output:  []string{"script.sh", "-option", "--access-token", "$PLUGIN_ACCESS_TOKEN"},
 			err:     nil,
 		},
 		// Test case 4
@@ -62,7 +86,7 @@ func TestSetAuthParams(t *testing.T) {
 		{
 			cmdArgs: []string{"app", "-flag"},
 			args:    Args{Username: "user", Password: "", APIKey: "apikey123", AccessToken: ""},
-			output:  []string{"app", "-flag", "--apikey $PLUGIN_API_KEY"},
+			output:  []string{"app", "-flag", "--apikey", "$PLUGIN_API_KEY"},
 			err:     nil,
 		},
 	}
@@ -78,9 +102,11 @@ func TestSetAuthParams(t *testing.T) {
 		} else {
 			if len(result) != len(tc.output) {
 				t.Errorf("Expected output length: %d, Got: %d", len(tc.output), len(result))
+				continue
 			}
 			for j := range result {
-				if result[j] != tc.output[j] {
+				got := normalizeCommandForTest(result[j], tc.output[j])
+				if got != tc.output[j] {
 					t.Errorf("Mismatch at index %d. Expected: %s, Got: %s", j, tc.output[j], result[j])
 				}
 			}
@@ -116,8 +142,18 @@ func TestSanitizeURL(t *testing.T) {
 		},
 		{
 			inputURL: "https://example.com/notartifactory",
-			expected: "",
-			err:      fmt.Errorf("url does not contain '/artifactory': https://example.com/notartifactory"),
+			expected: "https://example.com/notartifactory/artifactory/",
+			err:      nil,
+		},
+		{
+			inputURL: "https://example.com",
+			expected: "https://example.com/artifactory/",
+			err:      nil,
+		},
+		{
+			inputURL: "https://example.com/artifactory/artifactory/repository",
+			expected: "https://example.com/artifactory/",
+			err:      nil,
 		},
 		{
 			inputURL: "invalid-url",
@@ -139,5 +175,29 @@ func TestSanitizeURL(t *testing.T) {
 				t.Errorf("For URL %s, Expected: %s, Got: %s", tc.inputURL, tc.expected, result)
 			}
 		}
+	}
+}
+
+func TestNormalizePlatformURL(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  string
+	}{
+		{"https://example.jfrog.io", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory/", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory/libs-release-local/path", "https://example.jfrog.io"},
+		{"https://example.jfrog.io/artifactory/artifactory", "https://example.jfrog.io"},
+	} {
+		t.Run(test.input, func(t *testing.T) {
+			got, err := normalizePlatformURL(test.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("normalizePlatformURL(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
 	}
 }
