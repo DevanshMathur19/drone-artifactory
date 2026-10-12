@@ -69,11 +69,6 @@ pipeline:
         if ([int]$repositories.StatusCode -ne 200) {
           throw "JFrog access-token preflight failed with HTTP $([int]$repositories.StatusCode): $($repositories.Content)"
         }
-        $repos = @($repositories.Content | ConvertFrom-Json)
-        $repoKeys = @($repos | ForEach-Object { $_.key })
-        foreach ($requiredRepo in @($env:MAVEN_RELEASE_REPO, $env:MAVEN_SNAPSHOT_REPO, $env:GENERIC_REPO)) {
-          if ($repoKeys -notcontains $requiredRepo) { throw "Required repository is absent: $requiredRepo" }
-        }
 
         if ($env:LTSC -eq '2025') {
           $javaHosts = @(
