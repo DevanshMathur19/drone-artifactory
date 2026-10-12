@@ -743,6 +743,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
+                          JFROG_CLI_RETRIES: "3"
                           JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\java.hosts -Djava.net.preferIPv4Stack=true"
                   - step:
                       type: Plugin
@@ -771,6 +772,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
+                          JFROG_CLI_RETRIES: "3"
                           JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\java.hosts -Djava.net.preferIPv4Stack=true"
                   - step:
                       type: Plugin
@@ -795,6 +797,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
+                          JFROG_CLI_RETRIES: "3"
                   - step:
                       type: ArtifactoryUpload
                       name: Native generic upload
@@ -825,6 +828,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
+                          JFROG_CLI_RETRIES: "3"
                   - step:
                       type: Plugin
                       name: Generic spec download
@@ -846,6 +850,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
+                          JFROG_CLI_RETRIES: "3"
                   - step:
                       type: Run
                       name: Verify downloaded artifacts
