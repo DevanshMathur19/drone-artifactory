@@ -113,13 +113,18 @@ pipeline:
           }
 
           if ($env:LTSC -eq '2025') {
-            $jfrogHost = ([uri]$env:JFROG_URL).DnsSafeHost
-            $jfrogAddress = [System.Net.Dns]::GetHostAddresses($jfrogHost) |
-              Where-Object AddressFamily -eq ([System.Net.Sockets.AddressFamily]::InterNetwork) |
-              Select-Object -First 1
-            if (-not $jfrogAddress) { throw "Could not resolve an IPv4 address for $jfrogHost" }
-            "$($jfrogAddress.IPAddressToString) $jfrogHost" |
-              Set-Content -LiteralPath 'C:\harness\jfrog.hosts' -Encoding ascii
+            $javaHosts = @(
+              ([uri]$env:JFROG_URL).DnsSafeHost
+              'repo.maven.apache.org'
+            )
+            $javaHostEntries = foreach ($javaHost in $javaHosts) {
+              $javaAddress = [System.Net.Dns]::GetHostAddresses($javaHost) |
+                Where-Object AddressFamily -eq ([System.Net.Sockets.AddressFamily]::InterNetwork) |
+                Select-Object -First 1
+              if (-not $javaAddress) { throw "Could not resolve an IPv4 address for $javaHost" }
+              "$($javaAddress.IPAddressToString) $javaHost"
+            }
+            $javaHostEntries | Set-Content -LiteralPath 'C:\harness\java.hosts' -Encoding ascii
           }
         } finally {
           $client.Dispose()
@@ -738,7 +743,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\jfrog.hosts -Djava.net.preferIPv4Stack=true"
+                          JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\java.hosts -Djava.net.preferIPv4Stack=true"
                   - step:
                       type: Plugin
                       name: Gradle publish and build-info
@@ -766,7 +771,7 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\jfrog.hosts -Djava.net.preferIPv4Stack=true"
+                          JAVA_TOOL_OPTIONS: "-Djdk.net.hosts.file=C:\\harness\\java.hosts -Djava.net.preferIPv4Stack=true"
                   - step:
                       type: Plugin
                       name: Plugin generic upload and build-info
