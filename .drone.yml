@@ -133,7 +133,7 @@ depends_on:
 ---
 kind: pipeline
 type: vm
-name: windows-1809-amd64
+name: windows-ltsc2019-amd64
 
 pool:
   use: windows
@@ -165,8 +165,8 @@ steps:
     image: plugins/docker
     settings:
       auto_tag: true
-      auto_tag_suffix: windows-1809-amd64
-      dockerfile: docker/Dockerfile.windows.amd64.1809
+      auto_tag_suffix: windows-ltsc2019-amd64
+      dockerfile: docker/Dockerfile.windows.amd64.ltsc2019
       password:
         from_secret: docker_password
       repo: plugins/artifactory
@@ -274,5 +274,5 @@ trigger:
 depends_on:
   - linux-amd64
   - linux-arm64
-  - windows-1809-amd64
+  - windows-ltsc2019-amd64
   - windows-ltsc2022-amd64

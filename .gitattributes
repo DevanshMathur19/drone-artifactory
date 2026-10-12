@@ -1,0 +1,2 @@
+docker/Dockerfile* text eol=lf
+docker/*.tmpl text eol=lf

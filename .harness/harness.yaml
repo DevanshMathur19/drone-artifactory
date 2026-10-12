@@ -191,8 +191,8 @@ pipeline:
                           <+codebase.build.type> == "branch"
             description: ""
         - stage:
-            name: windows-1809-amd64
-            identifier: windows1809amd64
+            name: windows-ltsc2019-amd64
+            identifier: windowsltsc2019amd64
             type: CI
             spec:
               cloneCodebase: true
@@ -237,9 +237,9 @@ pipeline:
                           username: drone
                           password: <+secrets.getValue("Plugins_Docker_Hub_Pat")>
                           repo: plugins/artifactory
-                          dockerfile: docker/Dockerfile.windows.amd64.1809
+                          dockerfile: docker/Dockerfile.windows.amd64.ltsc2019
                           auto_tag: "true"
-                          auto_tag_suffix: windows-1809-amd64
+                          auto_tag_suffix: windows-ltsc2019-amd64
                       when:
                         stageStatus: Success
                         condition: <+codebase.build.type> == "tag"
@@ -251,9 +251,9 @@ pipeline:
                         connectorRef: Plugins_Docker_Hub_Connector
                         repo: plugins/artifactory
                         tags:
-                          - windows-1809-amd64
+                          - windows-ltsc2019-amd64
                         caching: false
-                        dockerfile: docker/Dockerfile.windows.amd64.1809
+                        dockerfile: docker/Dockerfile.windows.amd64.ltsc2019
                       when:
                         stageStatus: Success
                         condition: |
@@ -530,8 +530,8 @@ pipeline:
                           <+codebase.build.type> == "branch"
             description: ""
         - stage:
-            name: win-1809-amd64-rf
-            identifier: win1809amd64rf
+            name: win-ltsc2019-amd64-rf
+            identifier: winltsc2019amd64rf
             type: CI
             spec:
               cloneCodebase: true
@@ -594,9 +594,9 @@ pipeline:
                           username: <+secrets.getValue("harnesssecureusername")>
                           password: <+secrets.getValue("dockerHarnessSecurePwd")>
                           repo: harnesssecure/artifactory
-                          dockerfile: rf-plugins/drone-artifactory/Dockerfile.windows.amd64.1809
+                          dockerfile: rf-plugins/drone-artifactory/Dockerfile.windows.amd64.ltsc2019
                           auto_tag: "true"
-                          auto_tag_suffix: windows-1809-amd64
+                          auto_tag_suffix: windows-ltsc2019-amd64
                       when:
                         stageStatus: Success
                         condition: <+codebase.build.type> == "tag"
@@ -608,9 +608,9 @@ pipeline:
                         connectorRef: harnesssecure
                         repo: harnesssecure/artifactory
                         tags:
-                          - windows-1809-amd64
+                          - windows-ltsc2019-amd64
                         caching: false
-                        dockerfile: rf-plugins/drone-artifactory/Dockerfile.windows.amd64.1809
+                        dockerfile: rf-plugins/drone-artifactory/Dockerfile.windows.amd64.ltsc2019
                       when:
                         stageStatus: Success
                         condition: |
@@ -867,6 +867,81 @@ pipeline:
                       when:
                         stageStatus: Success
                         condition: <+codebase.build.type> == "branch"
+        - stage:
+            name: npm Node PR validation
+            identifier: npm_node_pr
+            description: Validates the Node-enabled Artifactory profiles for pull requests.
+            type: Pipeline
+            spec:
+              org: default
+              project: Drone_Plugins
+              pipeline: droneartifactorynoderelease
+              inputs:
+                identifier: droneartifactorynoderelease
+                properties:
+                  ci:
+                    codebase:
+                      build:
+                        type: PR
+                        spec:
+                          number: <+codebase.prNumber>
+                variables:
+                  - name: expectedCommitSha
+                    type: String
+                    value: <+codebase.commitSha>
+            when:
+              pipelineStatus: Success
+              condition: <+codebase.build.type> == "PR"
+        - stage:
+            name: npm Node branch release
+            identifier: npm_node_branch
+            description: Publishes moving Node-enabled Artifactory profile tags for branch builds.
+            type: Pipeline
+            spec:
+              org: default
+              project: Drone_Plugins
+              pipeline: droneartifactorynoderelease
+              inputs:
+                identifier: droneartifactorynoderelease
+                properties:
+                  ci:
+                    codebase:
+                      build:
+                        type: branch
+                        spec:
+                          branch: <+codebase.branch>
+                variables:
+                  - name: expectedCommitSha
+                    type: String
+                    value: <+codebase.commitSha>
+            when:
+              pipelineStatus: Success
+              condition: <+codebase.build.type> == "branch"
+        - stage:
+            name: npm Node tag release
+            identifier: npm_node_tag
+            description: Publishes immutable Node-enabled Artifactory profile tags and manifests.
+            type: Pipeline
+            spec:
+              org: default
+              project: Drone_Plugins
+              pipeline: droneartifactorynoderelease
+              inputs:
+                identifier: droneartifactorynoderelease
+                properties:
+                  ci:
+                    codebase:
+                      build:
+                        type: tag
+                        spec:
+                          tag: <+codebase.tag>
+                variables:
+                  - name: expectedCommitSha
+                    type: String
+                    value: <+codebase.commitSha>
+            when:
+              pipelineStatus: Success
+              condition: <+codebase.build.type> == "tag"
     - stage:
         name: Manifest
         identifier: Manifest
