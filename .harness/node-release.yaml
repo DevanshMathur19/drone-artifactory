@@ -283,7 +283,8 @@ pipeline:
                         command: |
                           set -eu
                           test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
-                          test "$(powershell -NoProfile -Command '(Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\").CurrentBuild')" = 17763
+                          actual_build="$(powershell -NoProfile -NonInteractive -Command '[Console]::Write([Environment]::OSVersion.Version.Build)')"
+                          test "$actual_build" = 17763
                           go test ./...
                           mkdir -p release/windows/amd64
                           if [ '<+codebase.build.type>' = tag ]; then
@@ -413,7 +414,8 @@ pipeline:
                         command: |
                           set -eu
                           test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
-                          test "$(powershell -NoProfile -Command '(Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\").CurrentBuild')" = 20348
+                          actual_build="$(powershell -NoProfile -NonInteractive -Command '[Console]::Write([Environment]::OSVersion.Version.Build)')"
+                          test "$actual_build" = 20348
                           go test ./...
                           mkdir -p release/windows/amd64
                           if [ '<+codebase.build.type>' = tag ]; then
@@ -545,7 +547,8 @@ pipeline:
                         command: |
                           set -eu
                           test '<+codebase.commitSha>' = '<+pipeline.variables.expectedCommitSha>'
-                          test "$(powershell -NoProfile -Command '(Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\").CurrentBuild')" = 26100
+                          actual_build="$(powershell -NoProfile -NonInteractive -Command '[Console]::Write([Environment]::OSVersion.Version.Build)')"
+                          test "$actual_build" = 26100
                           go test ./...
                           mkdir -p release/windows/amd64
                           if [ '<+codebase.build.type>' = tag ]; then
