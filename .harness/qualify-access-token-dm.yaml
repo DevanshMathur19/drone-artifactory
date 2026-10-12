@@ -214,7 +214,7 @@ pipeline:
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: <+pipeline.variables.windows2019Candidate>
-                        resources: {limits: {memory: 4Gi, cpu: 2000m}}
+                        resources: {limits: {memory: 4Gi, cpu: 1000m}}
                         settings:
                           build_tool: mvn
                           command: publish
@@ -236,7 +236,7 @@ pipeline:
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: <+pipeline.variables.windows2019Candidate>
-                        resources: {limits: {memory: 4Gi, cpu: 2000m}}
+                        resources: {limits: {memory: 4Gi, cpu: 1000m}}
                         settings:
                           build_tool: gradle
                           command: publish
@@ -348,7 +348,7 @@ pipeline:
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: <+pipeline.variables.windows2022Candidate>
-                        resources: {limits: {memory: 4Gi, cpu: 2000m}}
+                        resources: {limits: {memory: 4Gi, cpu: 1000m}}
                         settings:
                           build_tool: mvn
                           command: publish
@@ -370,7 +370,7 @@ pipeline:
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: <+pipeline.variables.windows2022Candidate>
-                        resources: {limits: {memory: 4Gi, cpu: 2000m}}
+                        resources: {limits: {memory: 4Gi, cpu: 1000m}}
                         settings:
                           build_tool: gradle
                           command: publish
@@ -482,7 +482,7 @@ pipeline:
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: <+pipeline.variables.windows2025Candidate>
-                        resources: {limits: {memory: 4Gi, cpu: 2000m}}
+                        resources: {limits: {memory: 4Gi, cpu: 1000m}}
                         settings:
                           build_tool: mvn
                           command: publish
@@ -509,7 +509,7 @@ pipeline:
                       spec:
                         connectorRef: <+pipeline.variables.dockerConnector>
                         image: <+pipeline.variables.windows2025Candidate>
-                        resources: {limits: {memory: 4Gi, cpu: 2000m}}
+                        resources: {limits: {memory: 4Gi, cpu: 1000m}}
                         settings:
                           build_tool: gradle
                           command: publish
