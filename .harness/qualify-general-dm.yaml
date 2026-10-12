@@ -16,8 +16,8 @@ pipeline:
     - {name: mavenReleaseRepo, type: String, value: artifactory-maven-release-dm}
     - {name: mavenSnapshotRepo, type: String, value: artifactory-maven-snapshot-dm}
     - {name: genericRepo, type: String, value: artifactory-generic-dm}
-    - {name: httpsProxy, type: String, value: <+input>.default("")}
-    - {name: noProxy, type: String, value: <+input>.default("oidctest.jfrog.io,.jfrog.io")}
+    - {name: httpsProxy, type: String, value: '<+input>.default("")'}
+    - {name: noProxy, type: String, value: '<+input>.default("oidctest.jfrog.io,.jfrog.io")'}
     - name: qualificationScript
       type: String
       value: |-
@@ -725,6 +725,12 @@ pipeline:
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: <+pipeline.variables.noProxy>
+                          http_proxy: ""
+                          https_proxy: ""
+                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Plugin
                       name: Gradle publish and build-info
@@ -749,6 +755,12 @@ pipeline:
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: <+pipeline.variables.noProxy>
+                          http_proxy: ""
+                          https_proxy: ""
+                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Plugin
                       name: Plugin generic upload and build-info
@@ -769,6 +781,12 @@ pipeline:
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: <+pipeline.variables.noProxy>
+                          http_proxy: ""
+                          https_proxy: ""
+                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: ArtifactoryUpload
                       name: Native generic upload
@@ -796,6 +814,12 @@ pipeline:
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: <+pipeline.variables.noProxy>
+                          http_proxy: ""
+                          https_proxy: ""
+                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Plugin
                       name: Generic spec download
@@ -814,6 +838,12 @@ pipeline:
                         envVariables:
                           HARNESS_HTTPS_PROXY: <+pipeline.variables.httpsProxy>
                           HARNESS_NO_PROXY: <+pipeline.variables.noProxy>
+                          HTTP_PROXY: ""
+                          HTTPS_PROXY: ""
+                          NO_PROXY: <+pipeline.variables.noProxy>
+                          http_proxy: ""
+                          https_proxy: ""
+                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Run
                       name: Verify downloaded artifacts
