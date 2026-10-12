@@ -862,6 +862,11 @@ pipeline:
                           LTSC: "2025"
                         command: |
                           $ErrorActionPreference = 'Stop'
+                          $javaHosts = 'C:\harness\java.hosts'
+                          if (Test-Path -LiteralPath $javaHosts -PathType Leaf) {
+                            Get-Content -LiteralPath $javaHosts |
+                              Add-Content -LiteralPath "$env:SystemRoot\System32\drivers\etc\hosts" -Encoding ascii
+                          }
                           foreach ($root in @('downloads/direct', 'downloads/spec')) {
                             if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Missing download directory: $root" }
                             $files = @(Get-ChildItem -LiteralPath $root -File -Recurse)
