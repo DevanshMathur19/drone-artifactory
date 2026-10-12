@@ -392,7 +392,7 @@ pipeline:
                       identifier: native_generic_upload
                       spec:
                         connectorRef: <+pipeline.variables.artifactoryConnector>
-                        sourcePath: generic/files with spaces
+                        sourcePath: generic/files with spaces/**
                         target: <+pipeline.variables.genericRepo>/ltsc2019/<+pipeline.sequenceId>/native/
                   - step:
                       type: Plugin
@@ -584,7 +584,7 @@ pipeline:
                       identifier: native_generic_upload
                       spec:
                         connectorRef: <+pipeline.variables.artifactoryConnector>
-                        sourcePath: generic/files with spaces
+                        sourcePath: generic/files with spaces/**
                         target: <+pipeline.variables.genericRepo>/ltsc2022/<+pipeline.sequenceId>/native/
                   - step:
                       type: Plugin
@@ -775,7 +775,7 @@ pipeline:
                       identifier: native_generic_upload
                       spec:
                         connectorRef: <+pipeline.variables.artifactoryConnector>
-                        sourcePath: generic/files with spaces
+                        sourcePath: generic/files with spaces/**
                         target: <+pipeline.variables.genericRepo>/ltsc2025/<+pipeline.sequenceId>/native/
                   - step:
                       type: Plugin
