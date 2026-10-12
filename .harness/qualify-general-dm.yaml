@@ -728,9 +728,6 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          http_proxy: ""
-                          https_proxy: ""
-                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Plugin
                       name: Gradle publish and build-info
@@ -758,9 +755,6 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          http_proxy: ""
-                          https_proxy: ""
-                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Plugin
                       name: Plugin generic upload and build-info
@@ -784,9 +778,6 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          http_proxy: ""
-                          https_proxy: ""
-                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: ArtifactoryUpload
                       name: Native generic upload
@@ -817,9 +808,6 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          http_proxy: ""
-                          https_proxy: ""
-                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Plugin
                       name: Generic spec download
@@ -841,9 +829,6 @@ pipeline:
                           HTTP_PROXY: ""
                           HTTPS_PROXY: ""
                           NO_PROXY: <+pipeline.variables.noProxy>
-                          http_proxy: ""
-                          https_proxy: ""
-                          no_proxy: <+pipeline.variables.noProxy>
                   - step:
                       type: Run
                       name: Verify downloaded artifacts
