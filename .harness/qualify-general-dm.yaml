@@ -1,6 +1,6 @@
 pipeline:
-  name: Artifactory Plugin - Windows KubernetesDirect Qualification-dm
-  identifier: artifactory_plugin_windows_qualify_dm
+  name: Artifactory Plugin - General Windows Qualification-dm
+  identifier: artifactory_plugin_general_qualify_dm
   projectIdentifier: Drone_Plugins
   orgIdentifier: default
   variables:
