@@ -946,6 +946,8 @@ pipeline:
         name: Manifest
         identifier: Manifest
         type: CI
+        when:
+          pipelineStatus: All
         spec:
           cloneCodebase: true
           caching:
