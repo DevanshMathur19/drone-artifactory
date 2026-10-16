@@ -70,7 +70,7 @@ func TestGradleBuildDiscard(t *testing.T) {
 
 	wantCmds := []string{
 		"config add tmpServerId --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
-		"gradle-config --server-id-deploy= --server-id-resolve=",
+		"gradle-config --server-id-deploy=tmpServerId --server-id-resolve=tmpServerId",
 		"gradle publish --build-name=t2 --build-number=v1.0",
 		"config add tmpServerIdbdi --url=https://artifactory.test.io --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 		"rt build-discard --delete-artifacts=true --max-builds=5 --max-days=7 t2",

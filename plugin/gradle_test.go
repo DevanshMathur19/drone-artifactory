@@ -71,13 +71,16 @@ func TestGetGradlePublishCommandArgs(t *testing.T) {
 				BuildName:   RtBuildName,
 				BuildNumber: RtBuildNumber,
 				DeployerId:  RtDeployerId,
+				GradleTasks: `clean "publish release"`,
+				BuildFile:   "build files/customer.gradle",
 			},
 			output: []string{
 				"config add " + RtDeployerId + " --url=https://artifactory.test.io" +
 					" --user $PLUGIN_USERNAME --password $PLUGIN_PASSWORD --interactive=false",
 				"gradle-config --repo-deploy=" + RtTestRelRepo + " --repo-resolve=" +
 					RtResolveRelRepo + " --server-id-deploy=" + RtDeployerId + " --server-id-resolve=" + RtDeployerId,
-				"gradle publish --build-name=" + RtBuildName + " --build-number=" + RtBuildNumber,
+				"gradle clean publish release --build-name=" + RtBuildName + " --build-number=" +
+					RtBuildNumber + " -b build files/customer.gradle",
 			},
 			err: nil,
 		},
@@ -100,5 +103,25 @@ func TestGetGradlePublishCommandArgs(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestGetGradlePublishDefaultsToPublishTaskAndServer(t *testing.T) {
+	commands, err := GetGradlePublishCommand(Args{
+		Command:     Publish,
+		URL:         RtUrlTestStr,
+		AccessToken: RtAccessToken,
+		BuildName:   RtBuildName,
+		BuildNumber: RtBuildNumber,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := flattenCommands(commands)
+	if !strings.Contains(got[0], "config add tmpServerId ") {
+		t.Fatalf("default server ID was not used: %s", got[0])
+	}
+	if got[2] != "gradle publish --build-name="+RtBuildName+" --build-number="+RtBuildNumber {
+		t.Fatalf("default publish task changed: %s", got[2])
 	}
 }

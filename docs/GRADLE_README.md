@@ -23,6 +23,8 @@ docker build -t plugins/artifactory  -f docker/Dockerfile .
 # Gradle Build and Publish
 - Gradle build step is used to build the Gradle project and create artifacts.
 - Publish step is used to publish the Gradle project artifacts to the artifactory repositories.
+- `tasks` selects the Gradle tasks for both build and publish. Publish defaults to
+  `publish` only when `tasks` is omitted.
 - Authentication for Jfrog artifactory can be done using Username and Password or Access Token. Refer to below examples.
 - Additional build discard with below parameters can be done.
     - delete_artifacts: The flag to delete the artifacts, if not set will only delete build metadata.
@@ -74,6 +76,7 @@ docker build -t plugins/artifactory  -f docker/Dockerfile .
       repo_resolve: repo_resolve_gradle_02
       repo_deploy: repo_deploy_gradle_02
       deployer_id: gradle-deployer
+      tasks: clean artifactoryPublish
 ```
 
 ### Gradle Build step example using Access Token

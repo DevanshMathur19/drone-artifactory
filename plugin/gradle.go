@@ -111,8 +111,11 @@ func GetGradlePublishCommand(args Args) ([][]string, error) {
 	var cmdList [][]string
 	var jfrogConfigAddConfigCommandArgs []string
 
-	tmpServerId := args.DeployerId
-	jfrogConfigAddConfigCommandArgs, err := GetConfigAddConfigCommandArgs(tmpServerId,
+	serverID := args.DeployerId
+	if serverID == "" {
+		serverID = tmpServerId
+	}
+	jfrogConfigAddConfigCommandArgs, err := GetConfigAddConfigCommandArgs(serverID,
 		args.Username, args.Password, args.URL, args.AccessToken, args.APIKey)
 	if err != nil {
 		logrus.Println("GetConfigAddConfigCommandArgs error: ", err)
@@ -125,12 +128,23 @@ func GetGradlePublishCommand(args Args) ([][]string, error) {
 		logrus.Println("PopulateArgs error: ", err)
 		return cmdList, err
 	}
-	gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-deploy="+tmpServerId)
-	gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-resolve="+tmpServerId)
+	gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-deploy="+serverID)
+	gradleConfigCommandArgs = append(gradleConfigCommandArgs, "--server-id-resolve="+serverID)
 
-	rtPublishCommandArgs := []string{"gradle", Publish}
-	rtPublishCommandArgs = append(rtPublishCommandArgs, "--build-name="+args.BuildName)
-	rtPublishCommandArgs = append(rtPublishCommandArgs, "--build-number="+args.BuildNumber)
+	tasks, err := splitCommandArguments(args.GradleTasks)
+	if err != nil {
+		return cmdList, err
+	}
+	if len(tasks) == 0 {
+		tasks = []string{Publish}
+	}
+	rtPublishCommandArgs := append([]string{GradleCmd}, tasks...)
+	if err := PopulateArgs(&rtPublishCommandArgs, &args, GradleRunJsonTagToExeFlagMapStringItemList); err != nil {
+		return cmdList, err
+	}
+	if args.BuildFile != "" {
+		rtPublishCommandArgs = append(rtPublishCommandArgs, "-b", args.BuildFile)
+	}
 
 	cmdList = append(cmdList, jfrogConfigAddConfigCommandArgs)
 	cmdList = append(cmdList, gradleConfigCommandArgs)

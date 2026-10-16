@@ -221,3 +221,47 @@ func TestPrepareNpmEnvironmentRejectsUnknownVersion(t *testing.T) {
 		t.Fatalf("expected an unsupported npm version error, got %v", err)
 	}
 }
+
+func TestPrepareNpmEnvironmentPropagatesCustomCA(t *testing.T) {
+	certPath := filepath.Join(t.TempDir(), "customer-ca.pem")
+	environment, cleanup, err := prepareNpmEnvironment(
+		[]string{"jf", "npm", "ci"},
+		Args{PEMFileContents: "certificate", PEMFilePath: certPath},
+		[]string{"PATH=original-path", "NODE_EXTRA_CA_CERTS=stale", "NPM_CONFIG_CAFILE=stale"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	values := map[string]string{}
+	for _, entry := range environment {
+		name, value, found := strings.Cut(entry, "=")
+		if found {
+			values[name] = value
+		}
+	}
+	for _, name := range []string{"NODE_EXTRA_CA_CERTS", "NPM_CONFIG_CAFILE"} {
+		if values[name] != certPath {
+			t.Fatalf("%s=%q, want %q", name, values[name], certPath)
+		}
+	}
+}
+
+func TestPrepareNpmEnvironmentDoesNotForceCustomCAWhenInsecure(t *testing.T) {
+	environment, cleanup, err := prepareNpmEnvironment(
+		[]string{"jf", "npm", "install"},
+		Args{PEMFileContents: "certificate", PEMFilePath: "customer-ca.pem", Insecure: "true"},
+		[]string{"PATH=original-path"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	for _, entry := range environment {
+		if strings.HasPrefix(entry, "NODE_EXTRA_CA_CERTS=") ||
+			strings.HasPrefix(entry, "NPM_CONFIG_CAFILE=") {
+			t.Fatalf("insecure npm command unexpectedly received CA configuration: %s", entry)
+		}
+	}
+}

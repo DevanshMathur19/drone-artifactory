@@ -22,8 +22,28 @@ docker build -t plugins/artifactory  -f docker/Dockerfile .
 
 #  Download artifact to Jfrog Artifactory
 This step downloads the artifacts from Jfrog Artifactory.
-A valid spec or a spec path given as an argument is mandatory.
-The spec json format should be the same as Jfrog spec format
+Provide either `source` and `target`, an inline `spec`, or `spec_path`.
+The spec JSON format is the JFrog file-spec format. For direct source/target
+downloads, `flat: true` removes the repository directory hierarchy from the
+local target; it defaults to `false`.
+
+### Download using source and target
+```yaml
+- step:
+    type: Plugin
+    name: DownloadStep
+    identifier: DownloadStep
+    spec:
+      connectorRef: account.harnessImage
+      image: plugins/artifactory:linux-amd64
+      settings:
+        command: download
+        access_token: <+secrets.getValue("jfrog_access_token")>
+        url: https://URL.jfrog.io/artifactory
+        source: generic-local/releases/**/*.zip
+        target: ./downloads/
+        flat: true
+```
 
 ### Download artifact to Jfrog Artifactory using spec path example:
 ```yaml

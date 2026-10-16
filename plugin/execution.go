@@ -131,7 +131,15 @@ func replaceEnvironmentValue(environment []string, name, value string) []string 
 }
 
 func prepareNpmEnvironment(command []string, args Args, environment []string) ([]string, func(), error) {
-	if args.NpmVersion == "" || len(command) < 2 || command[1] != NpmCmd {
+	if len(command) < 2 || command[1] != NpmCmd {
+		return environment, func() {}, nil
+	}
+	if args.PEMFileContents != "" && !parseBoolOrDefault(false, args.Insecure) {
+		certPath := serverCertPath(args)
+		environment = replaceEnvironmentValue(environment, "NODE_EXTRA_CA_CERTS", certPath)
+		environment = replaceEnvironmentValue(environment, "NPM_CONFIG_CAFILE", certPath)
+	}
+	if args.NpmVersion == "" {
 		return environment, func() {}, nil
 	}
 	allowed := map[string]struct{}{

@@ -55,6 +55,17 @@ settings:
 The plugin selects the alternate for its JFrog npm subprocess without changing
 the image-wide default. Unknown or unavailable versions fail explicitly.
 
+## Private certificate authorities
+
+Set `pem_file_contents` to a secret containing the trusted PEM certificate.
+The plugin installs it for JFrog CLI and passes the same file to the Node/npm
+subprocess through `NODE_EXTRA_CA_CERTS` and `NPM_CONFIG_CAFILE`.
+
+```yaml
+settings:
+  pem_file_contents: <+secrets.getValue("jfrog_ca_pem")>
+```
+
 ## Build information
 
 `jf npm` receives `build_name`, `build_number`, `project`, and `module`.

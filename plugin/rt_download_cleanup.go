@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,6 +29,9 @@ func GetDownloadCommandArgs(args Args) ([][]string, error) {
 	if err != nil {
 		return cmdList, err
 	}
+	downloadCommandArgs = append(downloadCommandArgs, authParams...)
+	flat := parseBoolOrDefault(false, args.Flat)
+	downloadCommandArgs = append(downloadCommandArgs, "--flat="+strconv.FormatBool(flat))
 
 	if args.Spec != "" {
 		fileName, tempErr := writeTemporarySpec(args.Spec)
@@ -46,7 +50,6 @@ func GetDownloadCommandArgs(args Args) ([][]string, error) {
 		}
 	}
 
-	downloadCommandArgs = append(downloadCommandArgs, authParams...)
 	if args.SpecPath == "" {
 		downloadCommandArgs = append(downloadCommandArgs, args.Source, args.Target)
 	}

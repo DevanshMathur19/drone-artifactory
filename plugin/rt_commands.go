@@ -85,14 +85,7 @@ func WriteKnownGoodServerCertsForTls(args Args) error {
 		return nil
 	}
 
-	path := args.PEMFilePath
-	if path == "" {
-		if runtime.GOOS == "windows" {
-			path = "C:/users/ContainerAdministrator/.jfrog/security/certs/cert.pem"
-		} else {
-			path = "/root/.jfrog/security/certs/cert.pem"
-		}
-	}
+	path := serverCertPath(args)
 	logrus.Printf("Writing pem file at %q\n", path)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -128,6 +121,18 @@ func WriteKnownGoodServerCertsForTls(args Args) error {
 	}
 	logrus.Printf("Successfully wrote pem file at %q\n", path)
 	return nil
+}
+
+func serverCertPath(args Args) string {
+	path := args.PEMFilePath
+	if path == "" {
+		if runtime.GOOS == "windows" {
+			path = "C:/users/ContainerAdministrator/.jfrog/security/certs/cert.pem"
+		} else {
+			path = "/root/.jfrog/security/certs/cert.pem"
+		}
+	}
+	return path
 }
 
 func GetRtCommandsList(args Args) ([][]string, error) {

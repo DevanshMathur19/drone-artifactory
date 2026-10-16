@@ -46,5 +46,5 @@ RUN curl -fL https://getcli.jfrog.io/v2-jf | sh /dev/stdin 2.115.0
 RUN mv ./jf /usr/local/bin/jf
 RUN chmod +x /usr/local/bin/jf
 
-ADD release/linux/arm64/plugin /bin/
-ENTRYPOINT ["/bin/plugin"]
+ADD release/linux/arm64/plugin /usr/local/bin/drone-artifactory
+ENTRYPOINT ["drone-artifactory"]

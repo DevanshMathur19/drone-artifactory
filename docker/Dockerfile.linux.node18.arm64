@@ -28,9 +28,9 @@ RUN apk add --no-cache bash ca-certificates curl \
     && npm --version \
     && jfrog --version
 
-COPY release/linux/arm64/plugin /bin/plugin
+COPY release/linux/arm64/plugin /usr/local/bin/drone-artifactory
 
 LABEL org.opencontainers.image.source="https://github.com/drone-plugins/drone-artifactory" \
       io.harness.node.version="18.20.8"
 
-ENTRYPOINT ["/bin/plugin"]
+ENTRYPOINT ["drone-artifactory"]

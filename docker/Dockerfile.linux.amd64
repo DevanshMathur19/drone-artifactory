@@ -47,6 +47,6 @@ RUN mv ./jf /usr/local/bin/jf
 RUN chmod +x /usr/local/bin/jf
 
 # Add your custom plugin
-ADD release/linux/amd64/plugin /bin/
+ADD release/linux/amd64/plugin /usr/local/bin/drone-artifactory
 
-ENTRYPOINT ["/bin/plugin"]
+ENTRYPOINT ["drone-artifactory"]
